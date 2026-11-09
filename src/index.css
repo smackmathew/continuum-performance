@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    scroll-padding-top: 5rem;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+  }
+  :focus-visible {
+    @apply outline-none ring-2 ring-volt-400 ring-offset-2 ring-offset-ink-950;
+  }
+}
+
+@layer components {
+  .container-x { @apply mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8; }
+  .section { @apply py-20 sm:py-28; }
+  .eyebrow { @apply font-display text-sm font-semibold uppercase tracking-[0.2em] text-volt-400; }
+  .h2 { @apply mt-3 font-display text-4xl font-bold uppercase leading-[0.95] text-white sm:text-5xl; }
+  .btn { @apply inline-flex items-center justify-center gap-2 rounded-md px-5 py-3 font-display text-lg font-semibold uppercase tracking-wide transition; }
+  .btn-primary { @apply btn bg-volt-400 text-ink-950 hover:bg-volt-300; }
+  .btn-ghost { @apply btn border border-ink-600 text-white hover:border-volt-400 hover:text-volt-300; }
+  .field { @apply mt-1.5 w-full rounded-md border border-ink-600 bg-ink-900 px-3.5 py-2.5 text-white placeholder:text-zinc-500 focus:border-volt-400 focus:outline-none focus:ring-1 focus:ring-volt-400; }
+}
