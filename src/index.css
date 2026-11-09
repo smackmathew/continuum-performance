@@ -5,23 +5,28 @@
 @layer base {
   html {
     scroll-behavior: smooth;
-    scroll-padding-top: 5rem;
+    scroll-padding-top: 6.5rem;
   }
   @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
   }
   :focus-visible {
-    @apply outline-none ring-2 ring-volt-400 ring-offset-2 ring-offset-ink-950;
+    @apply outline-none ring-2 ring-flame-500 ring-offset-2 ring-offset-white;
   }
 }
 
 @layer components {
   .container-x { @apply mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8; }
   .section { @apply py-20 sm:py-28; }
-  .eyebrow { @apply font-display text-sm font-semibold uppercase tracking-[0.2em] text-volt-400; }
-  .h2 { @apply mt-3 font-display text-4xl font-bold uppercase leading-[0.95] text-white sm:text-5xl; }
+  .eyebrow { @apply font-display text-sm font-semibold uppercase tracking-[0.2em] text-flame-600; }
+  .h2 { @apply mt-3 font-display text-4xl font-bold uppercase leading-[0.95] text-navy-900 sm:text-5xl; }
+  /* On navy sections */
+  .on-dark .eyebrow { @apply text-flame-400; }
+  .on-dark .h2 { @apply text-white; }
+
   .btn { @apply inline-flex items-center justify-center gap-2 rounded-md px-5 py-3 font-display text-lg font-semibold uppercase tracking-wide transition; }
-  .btn-primary { @apply btn bg-volt-400 text-ink-950 hover:bg-volt-300; }
-  .btn-ghost { @apply btn border border-ink-600 text-white hover:border-volt-400 hover:text-volt-300; }
-  .field { @apply mt-1.5 w-full rounded-md border border-ink-600 bg-ink-900 px-3.5 py-2.5 text-white placeholder:text-zinc-500 focus:border-volt-400 focus:outline-none focus:ring-1 focus:ring-volt-400; }
+  .btn-primary { @apply btn bg-flame-600 text-white shadow-sm shadow-flame-600/20 hover:bg-flame-700; }
+  .btn-ghost { @apply btn border border-navy-200 text-navy-900 hover:border-flame-600 hover:text-flame-600; }
+  .btn-light { @apply btn border border-white/30 text-white hover:border-flame-400 hover:text-flame-300; }
+  .field { @apply mt-1.5 w-full rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-navy-900 placeholder:text-slate-400 focus:border-flame-600 focus:outline-none focus:ring-1 focus:ring-flame-600; }
 }

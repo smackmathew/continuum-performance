@@ -22,15 +22,15 @@ export default function Header() {
 
   return (
     <header
-      className={`fixed inset-x-0 top-0 z-40 transition ${
-        scrolled || open ? 'border-b border-ink-700 bg-ink-950/90 backdrop-blur' : 'bg-transparent'
+      className={`fixed inset-x-0 top-0 z-40 bg-white/95 backdrop-blur transition ${
+        scrolled || open ? 'border-b border-slate-200 shadow-sm' : 'border-b border-transparent'
       }`}
     >
-      <div className="container-x flex h-16 items-center justify-between">
+      <div className="container-x flex h-20 items-center justify-between sm:h-24">
         <Logo />
         <nav className="hidden items-center gap-8 md:flex" aria-label="Main">
           {links.map((l) => (
-            <a key={l.href} href={l.href} className="text-sm font-medium text-zinc-300 transition hover:text-volt-300">
+            <a key={l.href} href={l.href} className="text-sm font-semibold text-navy-800 transition hover:text-flame-600">
               {l.label}
             </a>
           ))}
@@ -40,7 +40,7 @@ export default function Header() {
         </nav>
         <button
           type="button"
-          className="rounded p-2 text-white md:hidden"
+          className="rounded p-2 text-navy-900 md:hidden"
           aria-expanded={open}
           aria-controls="mobile-nav"
           aria-label={open ? 'Close menu' : 'Open menu'}
@@ -56,7 +56,7 @@ export default function Header() {
           <ul className="flex flex-col gap-1">
             {links.map((l) => (
               <li key={l.href}>
-                <a href={l.href} onClick={() => setOpen(false)} className="block rounded px-2 py-3 font-display text-xl uppercase text-white hover:text-volt-300">
+                <a href={l.href} onClick={() => setOpen(false)} className="block rounded px-2 py-3 font-display text-xl uppercase text-navy-900 hover:text-flame-600">
                   {l.label}
                 </a>
               </li>

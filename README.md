@@ -13,6 +13,16 @@ Every word, price and contact detail is in **`src/content/site.ts`**. Anything m
 and testimonials all need replacing with the real thing before launch. Coach photos go in
 `public/` (see the comment in `src/components/Coaches.tsx`).
 
+## Brand
+
+- **Logo** (`public/`): `logo.png` (dark, for white backgrounds), `logo-white.png` (for navy
+  backgrounds), `logo-mark.png` (the wing-C mark alone) and the favicons, all made from the supplied
+  black-on-white logo with transparent backgrounds. The logo is tinted the brand navy (`#0b1730`).
+- **Colors** (`tailwind.config.js`): white background, **navy** (`navy-900` `#0b1730`) for headings and
+  dark sections, **flame** red-orange (`flame-600` `#d63a0f`) for buttons and accents, and `mist`
+  (`#f5f7fb`) for light-gray sections. Use `flame-600` or darker for text and buttons on white and
+  `flame-400` on navy; those pairings meet WCAG AA contrast.
+
 ## Contact form
 
 By default the form opens the visitor's email app, addressed to the email in `site.ts`. To have
