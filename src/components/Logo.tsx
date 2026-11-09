@@ -1,15 +1,12 @@
 import { business } from '../content/site';
 
-export default function Logo({ className = '' }: { className?: string }) {
+const base = import.meta.env.BASE_URL;
+
+/** The full Continuum Performance lockup. `light` is the white version for navy backgrounds. */
+export default function Logo({ light = false, className = 'h-12 sm:h-16' }: { light?: boolean; className?: string }) {
   return (
-    <a href="#top" className={`flex items-center gap-2.5 ${className}`} aria-label={`${business.name} home`}>
-      <svg viewBox="0 0 64 64" className="h-8 w-8" aria-hidden="true">
-        <path d="M44 20a16 16 0 1 0 0 24" fill="none" stroke="#d4ff3f" strokeWidth="7" strokeLinecap="round" />
-        <circle cx="46" cy="32" r="4.5" fill="#d4ff3f" />
-      </svg>
-      <span className="font-display text-xl font-bold uppercase leading-none tracking-wide text-white">
-        Continuum<span className="block text-[0.7rem] font-semibold tracking-[0.35em] text-zinc-400">Performance</span>
-      </span>
+    <a href="#top" className="inline-flex shrink-0 items-center" aria-label={`${business.name} home`}>
+      <img src={`${base}${light ? 'logo-white.png' : 'logo.png'}`} alt={business.name} width={900} height={288} className={`w-auto ${className}`} />
     </a>
   );
 }
