@@ -25,23 +25,52 @@ and testimonials all need replacing with the real thing before launch. Coach pho
 
 ## Contact form
 
-By default the form opens the visitor's email app, addressed to the email in `site.ts`. To have
-submissions arrive without that step, create a form at a service such as Formspree or Basin and
-set its URL as `VITE_CONTACT_ENDPOINT` (in `.env.local` for local builds, or as a repository
-variable under Settings → Secrets and variables → Actions → Variables for the deployed site).
+Submissions are saved to the **`leads`** collection in Firestore in the `move-strong` Firebase
+project. View them in the [Firebase console](https://console.firebase.google.com/project/move-strong/firestore)
+→ Firestore → `leads` (newest have `status: "new"`).
+
+`firestore.rules` lets the public site *add* a lead (with checked fields and a server timestamp)
+and nothing else: no browser can read, change or delete leads, and every other collection is
+closed. `npm test` checks those rules against the Firestore emulator (needs Java 11+).
+
+The site needs the project's web-app config at build time (these values are public by design;
+the rules are what protect the data). In the Firebase console → Project settings → General → Your
+apps, add a **Web app** if there isn't one, then set these as repository variables (Settings →
+Secrets and variables → Actions → **Variables**):
+
+- `VITE_FIREBASE_API_KEY`
+- `VITE_FIREBASE_APP_ID`
+
+For local builds put the same values in `.env.local` (see `.env.example`). Built without them, the
+form falls back to opening the visitor's email app.
 
 ## Developing
 
 ```bash
 npm ci
 npm run dev       # http://localhost:5173
+npm test          # Firestore rules tests against the emulator
 npm run build     # type-check and build to dist/
-npm run preview   # serve the built site
 ```
 
 ## Deploying
 
-`.github/workflows/deploy.yml` builds every push and pull request, and deploys `main` to GitHub
-Pages. Turn Pages on once under Settings → Pages → Source: **GitHub Actions**. The build uses
-relative paths, so `dist/` also works as-is on Netlify, Vercel, Firebase Hosting or any static host;
-point a custom domain at whichever you choose.
+`.github/workflows/deploy.yml` tests and builds every push and pull request, and deploys `main` to
+**Firebase Hosting** (https://move-strong.web.app) along with the Firestore rules. It signs in with a
+service-account key stored as a repository secret:
+
+1. Firebase console → Project settings → **Service accounts** → **Generate new private key**.
+   (The default `firebase-adminsdk` account has the Firebase Admin role, which covers everything here.)
+2. GitHub → Settings → Secrets and variables → Actions → **New repository secret**: name
+   `FIREBASE_SERVICE_ACCOUNT`, value = the whole contents of the downloaded JSON file. Then delete
+   the file from your computer.
+
+A custom domain is added in the Firebase console → Hosting → **Add custom domain**.
+
+## Cleaning out old data
+
+The `move-strong` project was used before. **Actions → Firebase inventory & cleanup → Run
+workflow** lists what's in it: Firestore collections and document counts, Authentication users,
+Storage files, Cloud Functions and Hosting sites. Run it once with no boxes ticked to see what's
+there, then again with the boxes for what to delete and `move-strong` typed in the confirmation
+box. The `leads` collection is never deleted. Deleting is permanent.

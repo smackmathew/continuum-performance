@@ -1,7 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { business, contact } from '../content/site';
-
-const endpoint = import.meta.env.VITE_CONTACT_ENDPOINT as string | undefined;
+import { leadsEnabled, saveLead, type Lead } from '../leads';
 
 type Status = 'idle' | 'sending' | 'sent' | 'error';
 
@@ -13,19 +12,26 @@ export default function Contact() {
     e.preventDefault();
     const form = e.currentTarget;
     const data = new FormData(form);
+    const field = (k: string) => String(data.get(k) ?? '');
+    const lead: Lead = { name: field('name'), email: field('email'), phone: field('phone'), interest: field('interest'), message: field('message') };
 
-    // No form service configured: open the visitor's email app with the details filled in.
-    if (!endpoint) {
-      const lines = ['name', 'email', 'phone', 'interest', 'message'].map((k) => `${k[0].toUpperCase()}${k.slice(1)}: ${data.get(k) ?? ''}`);
-      const subject = encodeURIComponent(`Free assessment request: ${data.get('name')}`);
+    // Bots fill the hidden field; act as if it worked and save nothing.
+    if (field('_gotcha')) {
+      setStatus('sent');
+      return;
+    }
+
+    // Built without Firebase settings: open the visitor's email app with the details filled in.
+    if (!leadsEnabled) {
+      const lines = (Object.keys(lead) as (keyof Lead)[]).map((k) => `${k[0].toUpperCase()}${k.slice(1)}: ${lead[k]}`);
+      const subject = encodeURIComponent(`Free assessment request: ${lead.name}`);
       window.location.href = `mailto:${business.email}?subject=${subject}&body=${encodeURIComponent(lines.join('\n'))}`;
       return;
     }
 
     setStatus('sending');
     try {
-      const res = await fetch(endpoint, { method: 'POST', body: data, headers: { Accept: 'application/json' } });
-      if (!res.ok) throw new Error(String(res.status));
+      await saveLead(lead);
       setStatus('sent');
       form.reset();
     } catch {
