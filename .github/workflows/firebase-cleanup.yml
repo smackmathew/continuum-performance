@@ -1,0 +1,83 @@
+name: Firebase inventory & cleanup
+
+# Run by hand from the Actions tab. With no boxes ticked it only lists what is in
+# the move-strong project. The "leads" collection (this site's contact-form
+# submissions) is never deleted.
+on:
+  workflow_dispatch:
+    inputs:
+      delete_firestore:
+        description: Delete every Firestore collection except "leads"
+        type: boolean
+        default: false
+      delete_auth_users:
+        description: Delete all Authentication user accounts
+        type: boolean
+        default: false
+      delete_storage:
+        description: Delete all files in the default Storage bucket
+        type: boolean
+        default: false
+      delete_functions:
+        description: Delete all deployed Cloud Functions
+        type: boolean
+        default: false
+      confirm:
+        description: To delete anything, type the project ID (move-strong)
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Check confirmation
+        env:
+          ANY_DELETE: ${{ inputs.delete_firestore || inputs.delete_auth_users || inputs.delete_storage || inputs.delete_functions }}
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          if [ "$ANY_DELETE" = "true" ] && [ "$CONFIRM" != "move-strong" ]; then
+            echo "::error::A delete option is ticked but the confirmation box doesn't say move-strong. Nothing was deleted."
+            exit 1
+          fi
+      - name: Sign in to Google Cloud
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "::error::Add the FIREBASE_SERVICE_ACCOUNT repository secret (see README → Deploying)."
+            exit 1
+          fi
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/sa.json" >> "$GITHUB_ENV"
+      - name: Firestore, Authentication and Storage
+        env:
+          FLAGS: >-
+            ${{ inputs.delete_firestore && '--delete-firestore' || '' }}
+            ${{ inputs.delete_auth_users && '--delete-auth-users' || '' }}
+            ${{ inputs.delete_storage && '--delete-storage' || '' }}
+        run: node scripts/firebase-cleanup.mjs $FLAGS
+      - name: Cloud Functions and Hosting
+        env:
+          DELETE_FUNCTIONS: ${{ inputs.delete_functions }}
+        run: |
+          echo "== Cloud Functions"
+          npx firebase functions:list --project move-strong --json > "$RUNNER_TEMP/fns.json" || echo '{"result":[]}' > "$RUNNER_TEMP/fns.json"
+          names=$(jq -r '.result[]? | .id // .name' "$RUNNER_TEMP/fns.json" | sed 's#.*/##' | sort -u)
+          if [ -z "$names" ]; then echo "  (none)"; else echo "$names" | sed 's/^/  /'; fi
+          if [ "$DELETE_FUNCTIONS" = "true" ] && [ -n "$names" ]; then
+            npx firebase functions:delete $names --project move-strong --force
+          fi
+          echo
+          echo "== Hosting sites"
+          npx firebase hosting:sites:list --project move-strong || true

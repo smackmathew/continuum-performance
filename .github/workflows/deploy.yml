@@ -6,13 +6,8 @@ on:
   pull_request:
   workflow_dispatch:
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
 concurrency:
-  group: pages
+  group: deploy-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -24,22 +19,53 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
-      - run: npm run build
-        env:
-          VITE_CONTACT_ENDPOINT: ${{ vars.VITE_CONTACT_ENDPOINT }}
-      - uses: actions/upload-pages-artifact@v3
-        if: github.ref == 'refs/heads/main'
+      - uses: actions/setup-java@v4
         with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      - name: Test Firestore security rules
+        run: npm test
+      - name: Build
+        run: npm run build
+        env:
+          VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID || 'move-strong' }}
+          VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: site
           path: dist
 
   deploy:
+    # Deploys the site to Firebase Hosting and the Firestore security rules to the
+    # move-strong project. Needs the FIREBASE_SERVICE_ACCOUNT repository secret.
     if: github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      name: production
+      url: https://move-strong.web.app
     steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: site
+          path: dist
+      - name: Sign in to Google Cloud
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "::error::Add the FIREBASE_SERVICE_ACCOUNT repository secret (see README → Deploying)."
+            exit 1
+          fi
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/sa.json" >> "$GITHUB_ENV"
+      - name: Deploy hosting and Firestore rules
+        run: npx firebase deploy --only hosting,firestore:rules --project move-strong --non-interactive

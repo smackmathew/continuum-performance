@@ -1,0 +1,31 @@
+rules_version = '2';
+
+// The only thing the public website may do is add a lead from the contact form.
+// Nobody can read, change or delete leads from a browser: view them in the
+// Firebase console (Firestore → leads), which uses your Google account.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /leads/{leadId} {
+      allow create: if isValidLead(request.resource.data);
+      allow read, update, delete: if false;
+    }
+
+    // Everything else is closed.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidLead(d) {
+      return d.keys().hasOnly(['name', 'email', 'phone', 'interest', 'message', 'createdAt', 'status'])
+        && d.keys().hasAll(['name', 'email', 'phone', 'interest', 'message', 'createdAt', 'status'])
+        && d.name is string && d.name.size() > 0 && d.name.size() <= 120
+        && d.email is string && d.email.size() <= 200 && d.email.matches('^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$')
+        && d.phone is string && d.phone.size() <= 40
+        && d.interest is string && d.interest.size() <= 80
+        && d.message is string && d.message.size() <= 4000
+        && d.createdAt == request.time
+        && d.status == 'new';
+    }
+  }
+}
