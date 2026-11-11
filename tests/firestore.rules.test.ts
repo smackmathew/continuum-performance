@@ -166,7 +166,7 @@ describe('team and settings', () => {
   });
 
   it('everything else stays closed', async () => {
-    await assertFails(getDoc(doc(owner(), 'clients/abc')));
-    await assertFails(setDoc(doc(owner(), 'clients/abc'), { a: 1 }));
+    await assertFails(getDoc(doc(owner(), 'payments/abc')));
+    await assertFails(setDoc(doc(owner(), 'payments/abc'), { a: 1 }));
   });
 });

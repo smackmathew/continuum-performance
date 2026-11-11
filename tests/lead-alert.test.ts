@@ -43,3 +43,29 @@ describe('alert subject', () => {
     expect(e.subject).toBe('New enquiry: A Bcc: x@y.z (X Y)');
   });
 });
+
+// @ts-expect-error plain JS module without types
+import { buildOnboardingAlert, recipientsWithCoach } from '../functions/email.js';
+
+describe('onboarding alert', () => {
+  const team = [
+    { uid: 'kate', role: 'owner', email: 'kate@example.com' },
+    { uid: 'alex', role: 'staff', email: 'alex@example.com' },
+  ];
+  it('goes to the alert list (or owners) plus the client’s coach, without duplicates', () => {
+    expect(recipientsWithCoach([], team, 'alex')).toEqual(['kate@example.com', 'alex@example.com']);
+    expect(recipientsWithCoach(['front@example.com'], team, 'alex')).toEqual(['front@example.com', 'alex@example.com']);
+    expect(recipientsWithCoach([], team, 'kate')).toEqual(['kate@example.com']);
+    expect(recipientsWithCoach([], team, null)).toEqual(['kate@example.com']);
+  });
+  it('flags health "yes" answers without including any health details, and links to the client', () => {
+    const e = buildOnboardingAlert({ name: 'Jordan <Lee>' }, { clientId: 'c1', hubUrl: 'https://h/admin', from: 'f', healthYes: 2 });
+    expect(e.subject).toBe('Forms in: Jordan <Lee> (health check needed)');
+    expect(e.text).toContain('https://h/admin/#/clients/c1');
+    expect(e.text).toContain('"yes" to 2 health screen questions');
+    expect(e.html).not.toContain('<Lee>');
+    const ok = buildOnboardingAlert({ name: 'Sam' }, { clientId: 'c2', hubUrl: 'https://h/admin/', from: 'f', healthYes: 0 });
+    expect(ok.subject).toBe('Forms in: Sam');
+    expect(ok.text).toContain('"no" to every');
+  });
+});

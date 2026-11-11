@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { collection, doc, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { auth, db } from './firebase';
-import type { Lead, Note, Role, TeamMember } from './types';
+import type { Client, Invite, Lead, Note, Role, SubmissionData, TeamMember } from './types';
 
 export type Session =
   | { state: 'loading' }
@@ -74,16 +74,66 @@ export const useLead = (id: string) =>
     [id],
   );
 
-export const useNotes = (leadId: string) =>
+/** Notes under a lead or a client. */
+export const useNotes = (parent: 'leads' | 'clients', parentId: string) =>
   useLive<Note[]>(
     (set, fail) =>
       onSnapshot(
-        query(collection(db, 'leads', leadId, 'notes'), orderBy('createdAt', 'asc')),
+        query(collection(db, parent, parentId, 'notes'), orderBy('createdAt', 'asc')),
         (snap) => set(snap.docs.map((d) => ({ id: d.id, ...(d.data({ serverTimestamps: 'estimate' }) as Omit<Note, 'id'>) }))),
         fail,
       ),
     [],
-    [leadId],
+    [parent, parentId],
+  );
+
+/** The owner sees every client; coaches only those assigned to them. */
+export const useClients = (uid: string, role: Role) =>
+  useLive<Client[]>(
+    (set, fail) =>
+      onSnapshot(
+        role === 'owner'
+          ? query(collection(db, 'clients'), orderBy('createdAt', 'desc'), limit(500))
+          : query(collection(db, 'clients'), where('assignedTo', '==', uid), orderBy('createdAt', 'desc'), limit(500)),
+        (snap) => set(snap.docs.map((d) => ({ id: d.id, ...(d.data({ serverTimestamps: 'estimate' }) as Omit<Client, 'id'>) }))),
+        fail,
+      ),
+    [],
+    [uid, role],
+  );
+
+export const useClient = (id: string) =>
+  useLive<Client | null>(
+    (set, fail) =>
+      onSnapshot(
+        doc(db, 'clients', id),
+        (d) => set(d.exists() ? { id: d.id, ...(d.data({ serverTimestamps: 'estimate' }) as Omit<Client, 'id'>) } : null),
+        fail,
+      ),
+    null,
+    [id],
+  );
+
+/** The onboarding link's live status (open / submitted / revoked). */
+export const useInvite = (inviteId: string | null | undefined) =>
+  useLive<Invite | null>(
+    (set, fail) =>
+      inviteId
+        ? onSnapshot(doc(db, 'invites', inviteId), (d) => set(d.exists() ? { id: d.id, ...(d.data({ serverTimestamps: 'estimate' }) as Omit<Invite, 'id'>) } : null), fail)
+        : (set(null), () => {}),
+    null,
+    [inviteId],
+  );
+
+/** The client's submitted answers (team only). */
+export const useSubmission = (inviteId: string | null | undefined, submitted: boolean) =>
+  useLive<SubmissionData | null>(
+    (set, fail) =>
+      inviteId && submitted
+        ? onSnapshot(doc(db, 'invites', inviteId, 'submission', 'form'), (d) => set(d.exists() ? (d.data({ serverTimestamps: 'estimate' }) as SubmissionData) : null), fail)
+        : (set(null), () => {}),
+    null,
+    [inviteId, submitted],
   );
 
 /** The owner gets the whole team; staff can only read their own record. */
@@ -108,7 +158,7 @@ export const useAlertEmails = () =>
     [],
   );
 
-/** Tiny hash router: #/ , #/leads/:id , #/settings */
+/** Tiny hash router: #/ , #/leads/:id , #/clients , #/clients/:id , #/settings */
 export function useRoute(): string {
   const [route, setRoute] = useState(() => window.location.hash.replace(/^#/, '') || '/');
   useEffect(() => {
