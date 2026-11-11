@@ -1,14 +1,51 @@
 rules_version = '2';
 
-// The only thing the public website may do is add a lead from the contact form.
-// Nobody can read, change or delete leads from a browser: view them in the
-// Firebase console (Firestore → leads), which uses your Google account.
+// Who can do what:
+// - The public website can only ADD a lead (contact form). Nothing else.
+// - Team members (custom claim role: "owner" or "staff", granted with the
+//   "Team access" GitHub workflow) can read leads, work them (status,
+//   assignee, read/unread) and write notes.
+// - Only the owner can delete leads and change settings.
+// - Team records are written only by the server (the workflow), never by a browser.
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    function role() {
+      return request.auth == null ? null : request.auth.token.get('role', null);
+    }
+    function isTeam() {
+      return role() == 'owner' || role() == 'staff';
+    }
+    function isOwner() {
+      return role() == 'owner';
+    }
+
     match /leads/{leadId} {
       allow create: if isValidLead(request.resource.data);
-      allow read, update, delete: if false;
+      allow read: if isTeam();
+      allow update: if isTeam() && isValidLeadUpdate();
+      allow delete: if isOwner();
+
+      match /notes/{noteId} {
+        allow read: if isTeam();
+        allow create: if isTeam() && isValidNote(request.resource.data);
+        allow delete: if isTeam() && (resource.data.authorUid == request.auth.uid || isOwner());
+      }
+    }
+
+    match /team/{uid} {
+      allow read: if isTeam();
+      allow write: if false;
+    }
+
+    match /settings/notifications {
+      allow read: if isTeam();
+      allow write: if isOwner()
+        && request.resource.data.keys().hasOnly(['leadAlertEmails', 'updatedAt', 'updatedBy'])
+        && request.resource.data.leadAlertEmails is list
+        && request.resource.data.leadAlertEmails.size() <= 10
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.updatedBy == request.auth.uid;
     }
 
     // Everything else is closed.
@@ -26,6 +63,26 @@ service cloud.firestore {
         && d.message is string && d.message.size() <= 4000
         && d.createdAt == request.time
         && d.status == 'new';
+    }
+
+    // Team members may only change how a lead is being worked, never what the visitor sent.
+    function isValidLeadUpdate() {
+      let d = request.resource.data;
+      return d.diff(resource.data).affectedKeys().hasOnly(['status', 'assignedTo', 'readAt', 'updatedAt', 'updatedBy'])
+        && d.status in ['new', 'contacted', 'assessment', 'joined', 'not_a_fit']
+        && (!('assignedTo' in d) || d.assignedTo == null || (d.assignedTo is string && d.assignedTo.size() <= 128))
+        && (!('readAt' in d) || d.readAt == null || d.readAt is timestamp)
+        && d.updatedAt == request.time
+        && d.updatedBy == request.auth.uid;
+    }
+
+    function isValidNote(d) {
+      return d.keys().hasOnly(['text', 'authorUid', 'authorName', 'createdAt'])
+        && d.keys().hasAll(['text', 'authorUid', 'authorName', 'createdAt'])
+        && d.text is string && d.text.size() > 0 && d.text.size() <= 5000
+        && d.authorUid == request.auth.uid
+        && d.authorName is string && d.authorName.size() <= 120
+        && d.createdAt == request.time;
     }
   }
 }
