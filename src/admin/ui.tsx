@@ -32,7 +32,9 @@ export function StatusPill({ status }: { status: string }) {
   );
 }
 
-export function Avatar({ name, className = 'h-7 w-7 text-xs' }: { name: string; className?: string }) {
+export function Avatar({ name, photoURL, className = 'h-7 w-7 text-xs' }: { name: string; photoURL?: string | null; className?: string }) {
+  if (photoURL)
+    return <img src={photoURL} alt="" title={name} referrerPolicy="no-referrer" className={`inline-block shrink-0 rounded-full object-cover ${className}`} />;
   const initials = name.split(/\s+/).map((p) => p[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() || '?';
   return (
     <span title={name} className={`inline-grid shrink-0 place-items-center rounded-full bg-navy-800 font-semibold text-white ${className}`}>

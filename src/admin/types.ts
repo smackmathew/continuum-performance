@@ -35,4 +35,4 @@ export type Note = {
   createdAt: Timestamp | null;
 };
 
-export type TeamMember = { uid: string; name: string; email: string; role: Role };
+export type TeamMember = { uid: string; name: string; email: string; role: Role; photoURL?: string | null };

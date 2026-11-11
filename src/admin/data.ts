@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { onAuthStateChanged, type User } from 'firebase/auth';
-import { collection, doc, limit, onSnapshot, orderBy, query } from 'firebase/firestore';
+import { collection, doc, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import type { Lead, Note, Role, TeamMember } from './types';
 
@@ -29,31 +29,37 @@ export function useSession(): Session {
   return session;
 }
 
-type Live<T> = { data: T; loading: boolean; error: string | null };
+type Live<T> = { data: T; loading: boolean; error: string | null; denied: boolean };
 
 function useLive<T>(subscribe: (set: (v: T) => void, fail: (e: Error) => void) => () => void, initial: T, deps: unknown[]): Live<T> {
-  const [state, setState] = useState<Live<T>>({ data: initial, loading: true, error: null });
+  const [state, setState] = useState<Live<T>>({ data: initial, loading: true, error: null, denied: false });
   useEffect(() => {
     setState((s) => ({ ...s, loading: true }));
     return subscribe(
-      (data) => setState({ data, loading: false, error: null }),
-      (e) => setState((s) => ({ ...s, loading: false, error: e.message })),
+      (data) => setState({ data, loading: false, error: null, denied: false }),
+      (e) => {
+        const denied = (e as { code?: string }).code === 'permission-denied';
+        setState((s) => ({ ...s, loading: false, denied, error: denied ? null : e.message }));
+      },
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
   return state;
 }
 
-export const useLeads = () =>
+/** The owner sees every lead; staff only see leads assigned to them (the rules enforce this too). */
+export const useLeads = (uid: string, role: Role) =>
   useLive<Lead[]>(
     (set, fail) =>
       onSnapshot(
-        query(collection(db, 'leads'), orderBy('createdAt', 'desc'), limit(500)),
+        role === 'owner'
+          ? query(collection(db, 'leads'), orderBy('createdAt', 'desc'), limit(500))
+          : query(collection(db, 'leads'), where('assignedTo', '==', uid), orderBy('createdAt', 'desc'), limit(500)),
         (snap) => set(snap.docs.map((d) => ({ id: d.id, ...(d.data({ serverTimestamps: 'estimate' }) as Omit<Lead, 'id'>) }))),
         fail,
       ),
     [],
-    [],
+    [uid, role],
   );
 
 export const useLead = (id: string) =>
@@ -80,16 +86,19 @@ export const useNotes = (leadId: string) =>
     [leadId],
   );
 
-export const useTeam = () =>
+/** The owner gets the whole team; staff can only read their own record. */
+export const useTeam = (uid: string, role: Role) =>
   useLive<TeamMember[]>(
     (set, fail) =>
-      onSnapshot(
-        collection(db, 'team'),
-        (snap) => set(snap.docs.map((d) => ({ uid: d.id, ...(d.data() as Omit<TeamMember, 'uid'>) })).sort((a, b) => a.name.localeCompare(b.name))),
-        fail,
-      ),
+      role === 'owner'
+        ? onSnapshot(
+            collection(db, 'team'),
+            (snap) => set(snap.docs.map((d) => ({ uid: d.id, ...(d.data() as Omit<TeamMember, 'uid'>) })).sort((a, b) => a.name.localeCompare(b.name))),
+            fail,
+          )
+        : onSnapshot(doc(db, 'team', uid), (d) => set(d.exists() ? [{ uid: d.id, ...(d.data() as Omit<TeamMember, 'uid'>) }] : []), fail),
     [],
-    [],
+    [uid, role],
   );
 
 export const useAlertEmails = () =>

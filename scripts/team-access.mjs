@@ -46,7 +46,7 @@ if (action === 'remove') {
   }
   const name = nameParts.join(' ').trim() || user.displayName || user.email.split('@')[0];
   await auth.setCustomUserClaims(user.uid, { ...(user.customClaims ?? {}), role: action });
-  await db.doc(`team/${user.uid}`).set({ name, email: user.email, role: action });
+  await db.doc(`team/${user.uid}`).set({ name, email: user.email, role: action, photoURL: user.photoURL ?? null });
   console.log(`${user.email} is now ${action === 'owner' ? 'an owner' : 'staff'} (shown as "${name}"). They can press "Check again" in the hub, or sign out and back in.`);
 }
 

@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react';
 import type { User } from 'firebase/auth';
-import { STATUSES, type Lead, type TeamMember } from '../types';
+import { STATUSES, type Lead, type Role, type TeamMember } from '../types';
 import { when } from '../format';
 import { Avatar, ErrorNote, Spinner, StatusPill } from '../ui';
 
 type Filter = 'open' | 'all' | (typeof STATUSES)[number]['id'];
 const OPEN = new Set(['new', 'contacted', 'assessment']);
 
-export function Inbox({ leads, loading, error, team, user }: { leads: Lead[]; loading: boolean; error: string | null; team: TeamMember[]; user: User }) {
+export function Inbox({ leads, loading, error, team, user, role }: { leads: Lead[]; loading: boolean; error: string | null; team: TeamMember[]; user: User; role: Role }) {
+  const owner = role === 'owner';
   const [filter, setFilter] = useState<Filter>('open');
   const [mine, setMine] = useState(false);
   const [q, setQ] = useState('');
@@ -35,8 +36,10 @@ export function Inbox({ leads, loading, error, team, user }: { leads: Lead[]; lo
     <div className="space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="font-display text-4xl font-bold uppercase text-navy-900">Leads</h1>
-          <p className="text-sm text-slate-500">Enquiries from the website, newest first. Updates live.</p>
+          <h1 className="font-display text-4xl font-bold uppercase text-navy-900">{owner ? 'Leads' : 'My leads'}</h1>
+          <p className="text-sm text-slate-500">
+            {owner ? 'Enquiries from the website, newest first. Updates live.' : 'Enquiries Kate has assigned to you, newest first. Updates live.'}
+          </p>
         </div>
         <div className="flex gap-2">
           <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, email, message…" aria-label="Search leads" className="field !mt-0 sm:w-72" />
@@ -59,10 +62,12 @@ export function Inbox({ leads, loading, error, team, user }: { leads: Lead[]; lo
             </button>
           ))}
         </div>
-        <label className="ml-auto flex cursor-pointer items-center gap-2 text-sm font-medium text-navy-800">
-          <input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} className="h-4 w-4 accent-flame-600" />
-          Assigned to me
-        </label>
+        {owner && (
+          <label className="ml-auto flex cursor-pointer items-center gap-2 text-sm font-medium text-navy-800">
+            <input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} className="h-4 w-4 accent-flame-600" />
+            Assigned to me
+          </label>
+        )}
       </div>
 
       <ErrorNote error={error} />
@@ -70,7 +75,11 @@ export function Inbox({ leads, loading, error, team, user }: { leads: Lead[]; lo
         <Spinner />
       ) : shown.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center text-slate-500">
-          {leads.length === 0 ? 'No enquiries yet. New ones from the website appear here instantly.' : 'Nothing matches these filters.'}
+          {leads.length > 0
+            ? 'Nothing matches these filters.'
+            : owner
+              ? 'No enquiries yet. New ones from the website appear here instantly.'
+              : 'Nothing assigned to you yet. When Kate assigns you an enquiry it appears here right away.'}
         </div>
       ) : (
         <ul className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -94,7 +103,9 @@ export function Inbox({ leads, loading, error, team, user }: { leads: Lead[]; lo
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1.5">
                     <time className="whitespace-nowrap text-xs text-slate-500">{when(l.createdAt)}</time>
-                    {assignee && <Avatar name={assignee} className="h-6 w-6 text-[10px]" />}
+                    {owner && assignee && (
+                      <Avatar name={assignee} photoURL={team.find((m) => m.uid === l.assignedTo)?.photoURL} className="h-6 w-6 text-[10px]" />
+                    )}
                   </div>
                 </a>
               </li>

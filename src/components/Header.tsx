@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import Logo from './Logo';
+import TeamButton from './TeamButton';
 
 const links = [
   { href: '#method', label: 'Method' },
@@ -37,19 +38,23 @@ export default function Header() {
           <a href="#contact" className="btn-primary !py-2 !text-base">
             Free assessment
           </a>
+          <TeamButton />
         </nav>
-        <button
-          type="button"
-          className="rounded p-2 text-navy-900 md:hidden"
-          aria-expanded={open}
-          aria-controls="mobile-nav"
-          aria-label={open ? 'Close menu' : 'Open menu'}
-          onClick={() => setOpen((o) => !o)}
-        >
-          <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-            {open ? <path d="M6 6l12 12M18 6L6 18" /> : <path d="M4 7h16M4 12h16M4 17h16" />}
-          </svg>
-        </button>
+        <div className="flex items-center gap-1 md:hidden">
+          <TeamButton />
+          <button
+            type="button"
+            className="rounded p-2 text-navy-900 md:hidden"
+            aria-expanded={open}
+            aria-controls="mobile-nav"
+            aria-label={open ? 'Close menu' : 'Open menu'}
+            onClick={() => setOpen((o) => !o)}
+          >
+            <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              {open ? <path d="M6 6l12 12M18 6L6 18" /> : <path d="M4 7h16M4 12h16M4 17h16" />}
+            </svg>
+          </button>
+        </div>
       </div>
       {open && (
         <nav id="mobile-nav" className="container-x pb-6 md:hidden" aria-label="Mobile">

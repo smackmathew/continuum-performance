@@ -5,7 +5,13 @@ import type { Status } from './types';
 const stamp = () => ({ updatedAt: serverTimestamp(), updatedBy: auth.currentUser!.uid });
 
 export const setStatus = (id: string, status: Status) => updateDoc(doc(db, 'leads', id), { status, ...stamp() });
-export const assign = (id: string, uid: string | null) => updateDoc(doc(db, 'leads', id), { assignedTo: uid, ...stamp() });
+/** Owner only. Assigning to someone else marks it unread, so it shows as new for them. */
+export const assign = (id: string, uid: string | null) =>
+  updateDoc(doc(db, 'leads', id), {
+    assignedTo: uid,
+    ...(uid && uid !== auth.currentUser!.uid ? { readAt: null } : {}),
+    ...stamp(),
+  });
 export const markRead = (id: string) => updateDoc(doc(db, 'leads', id), { readAt: serverTimestamp(), ...stamp() });
 export const markUnread = (id: string) => updateDoc(doc(db, 'leads', id), { readAt: null, ...stamp() });
 /** Owner only: deletes the lead and its notes together. */

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest';
 import { assertFails, assertSucceeds, initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/rules-unit-testing';
 import {
-  addDoc, collection, deleteDoc, doc, getDoc, getDocs, serverTimestamp, setDoc, Timestamp, updateDoc,
+  addDoc, collection, deleteDoc, doc, getDoc, getDocs, orderBy, query, serverTimestamp, setDoc, Timestamp, updateDoc, where,
 } from 'firebase/firestore';
 
 let env: RulesTestEnvironment;
@@ -18,12 +18,14 @@ beforeEach(async () => {
   await env.clearFirestore();
   await env.withSecurityRulesDisabled(async (ctx) => {
     const db = ctx.firestore();
-    await setDoc(doc(db, 'leads/lead1'), {
-      name: 'Jordan Lee', email: 'jordan@example.com', phone: '', interest: 'Not sure yet',
-      message: 'Hi', createdAt: Timestamp.now(), status: 'new',
-    });
+    const base = { email: 'x@example.com', phone: '', interest: 'Not sure yet', message: 'Hi', createdAt: Timestamp.now(), status: 'new' };
+    await setDoc(doc(db, 'leads/lead1'), { ...base, name: 'Jordan Lee', assignedTo: 'coach' });
+    await setDoc(doc(db, 'leads/lead2'), { ...base, name: 'Unassigned Una' });
+    await setDoc(doc(db, 'leads/lead3'), { ...base, name: 'Other Otto', assignedTo: 'other' });
     await setDoc(doc(db, 'leads/lead1/notes/n1'), { text: 'Called', authorUid: 'coach', authorName: 'Coach', createdAt: Timestamp.now() });
+    await setDoc(doc(db, 'leads/lead3/notes/n3'), { text: 'Mine', authorUid: 'other', authorName: 'Other', createdAt: Timestamp.now() });
     await setDoc(doc(db, 'team/kate'), { name: 'Kate', email: 'kate@example.com', role: 'owner' });
+    await setDoc(doc(db, 'team/coach'), { name: 'Coach', email: 'coach@example.com', role: 'staff' });
   });
 });
 
@@ -59,45 +61,70 @@ describe('public contact form', () => {
   it('never lets a visitor or a signed-in non-member read, change or delete leads', async () => {
     for (const db of [visitor(), stranger()]) {
       await assertFails(getDoc(doc(db, 'leads/lead1')));
+      await assertFails(getDoc(doc(db, 'leads/lead2')));
       await assertFails(getDocs(collection(db, 'leads')));
       await assertFails(updateDoc(doc(db, 'leads/lead1'), { status: 'contacted' }));
       await assertFails(deleteDoc(doc(db, 'leads/lead1')));
       await assertFails(getDocs(collection(db, 'leads/lead1/notes')));
       await assertFails(getDoc(doc(db, 'team/kate')));
+      await assertFails(getDoc(doc(db, 'settings/notifications')));
     }
   });
 });
 
-describe('team: leads', () => {
-  it('staff and owner can read leads', async () => {
-    await assertSucceeds(getDocs(collection(staff(), 'leads')));
-    await assertSucceeds(getDoc(doc(owner(), 'leads/lead1')));
+describe('owner: leads', () => {
+  it('sees every lead', async () => {
+    const all = await assertSucceeds(getDocs(query(collection(owner(), 'leads'), orderBy('createdAt', 'desc'))));
+    if (all.size !== 3) throw new Error(`expected 3 leads, got ${all.size}`);
   });
 
-  it('staff can change status, assignee and read state', async () => {
-    await assertSucceeds(updateDoc(doc(staff(), 'leads/lead1'), work('coach', { status: 'contacted', assignedTo: 'kate', readAt: serverTimestamp() })));
-    await assertSucceeds(updateDoc(doc(staff(), 'leads/lead1'), work('coach', { readAt: null, assignedTo: null })));
+  it('assigns, works and deletes leads', async () => {
+    await assertSucceeds(updateDoc(doc(owner(), 'leads/lead2'), work('kate', { assignedTo: 'coach', readAt: null })));
+    await assertSucceeds(updateDoc(doc(owner(), 'leads/lead1'), work('kate', { status: 'assessment' })));
+    await assertSucceeds(deleteDoc(doc(owner(), 'leads/lead3')));
   });
 
-  it('rejects an unknown status, editing what the visitor sent, or a faked author/time', async () => {
-    await assertFails(updateDoc(doc(staff(), 'leads/lead1'), work('coach', { status: 'vip' })));
-    await assertFails(updateDoc(doc(staff(), 'leads/lead1'), work('coach', { email: 'other@example.com' })));
-    await assertFails(updateDoc(doc(staff(), 'leads/lead1'), work('kate', { status: 'contacted' })));
-    await assertFails(updateDoc(doc(staff(), 'leads/lead1'), { status: 'contacted', updatedAt: Timestamp.fromMillis(0), updatedBy: 'coach' }));
-  });
-
-  it('only the owner can delete a lead', async () => {
-    await assertFails(deleteDoc(doc(staff(), 'leads/lead1')));
-    await assertSucceeds(deleteDoc(doc(owner(), 'leads/lead1')));
+  it('still cannot edit what the visitor sent or fake the author/time', async () => {
+    await assertFails(updateDoc(doc(owner(), 'leads/lead1'), work('kate', { email: 'other@example.com' })));
+    await assertFails(updateDoc(doc(owner(), 'leads/lead1'), work('coach', { status: 'contacted' })));
+    await assertFails(updateDoc(doc(owner(), 'leads/lead1'), work('kate', { status: 'vip' })));
   });
 });
 
-describe('team: notes', () => {
+describe('coach (staff): leads', () => {
+  it('sees only leads assigned to them', async () => {
+    await assertSucceeds(getDoc(doc(staff(), 'leads/lead1')));
+    await assertFails(getDoc(doc(staff(), 'leads/lead2')));
+    await assertFails(getDoc(doc(staff(), 'leads/lead3')));
+    const mine = await assertSucceeds(getDocs(query(collection(staff(), 'leads'), where('assignedTo', '==', 'coach'), orderBy('createdAt', 'desc'))));
+    if (mine.size !== 1) throw new Error(`expected 1 lead, got ${mine.size}`);
+    await assertFails(getDocs(collection(staff(), 'leads')));
+  });
+
+  it('can work their own lead: status and read state', async () => {
+    await assertSucceeds(updateDoc(doc(staff(), 'leads/lead1'), work('coach', { status: 'contacted', readAt: serverTimestamp() })));
+  });
+
+  it('cannot reassign, claim, or touch other leads', async () => {
+    await assertFails(updateDoc(doc(staff(), 'leads/lead1'), work('coach', { assignedTo: 'other' })));
+    await assertFails(updateDoc(doc(staff(), 'leads/lead1'), work('coach', { assignedTo: null })));
+    await assertFails(updateDoc(doc(staff(), 'leads/lead2'), work('coach', { assignedTo: 'coach' })));
+    await assertFails(updateDoc(doc(staff(), 'leads/lead3'), work('coach', { status: 'contacted' })));
+  });
+
+  it('cannot delete leads', async () => {
+    await assertFails(deleteDoc(doc(staff(), 'leads/lead1')));
+  });
+});
+
+describe('notes', () => {
   const note = (uid: string, extra: Record<string, unknown> = {}) => ({ text: 'Left a voicemail', authorUid: uid, authorName: 'Coach', createdAt: serverTimestamp(), ...extra });
 
-  it('team members can read and add notes as themselves', async () => {
+  it('a coach reads and adds notes only on their own leads', async () => {
     await assertSucceeds(getDocs(collection(staff(), 'leads/lead1/notes')));
     await assertSucceeds(addDoc(collection(staff(), 'leads/lead1/notes'), note('coach')));
+    await assertFails(getDocs(collection(staff(), 'leads/lead3/notes')));
+    await assertFails(addDoc(collection(staff(), 'leads/lead2/notes'), note('coach')));
   });
 
   it('rejects notes posted as someone else, empty, or edited later', async () => {
@@ -106,23 +133,34 @@ describe('team: notes', () => {
     await assertFails(updateDoc(doc(staff(), 'leads/lead1/notes/n1'), { text: 'changed' }));
   });
 
-  it('authors and the owner can delete notes; other staff cannot', async () => {
-    await assertFails(deleteDoc(doc(env.authenticatedContext('other', { role: 'staff' }).firestore(), 'leads/lead1/notes/n1')));
+  it('the author can delete their note; the owner can delete any', async () => {
+    await assertFails(deleteDoc(doc(staff(), 'leads/lead3/notes/n3')));
     await assertSucceeds(deleteDoc(doc(staff(), 'leads/lead1/notes/n1')));
+    await assertSucceeds(deleteDoc(doc(owner(), 'leads/lead3/notes/n3')));
+  });
+
+  it('the owner reads and adds notes on any lead', async () => {
+    await assertSucceeds(getDocs(collection(owner(), 'leads/lead3/notes')));
+    await assertSucceeds(addDoc(collection(owner(), 'leads/lead2/notes'), note('kate', { authorName: 'Kate' })));
   });
 });
 
 describe('team and settings', () => {
-  it('team members can read the team list, but nobody can write it from a browser', async () => {
-    await assertSucceeds(getDocs(collection(staff(), 'team')));
+  it('the owner reads the team list; a coach reads only their own record; nobody writes it from a browser', async () => {
+    await assertSucceeds(getDocs(collection(owner(), 'team')));
+    await assertSucceeds(getDoc(doc(staff(), 'team/coach')));
+    await assertFails(getDoc(doc(staff(), 'team/kate')));
+    await assertFails(getDocs(collection(staff(), 'team')));
     await assertFails(setDoc(doc(owner(), 'team/coach'), { name: 'x', email: 'x@example.com', role: 'owner' }));
+    await assertFails(setDoc(doc(staff(), 'team/coach'), { name: 'x', email: 'x@example.com', role: 'owner' }));
   });
 
   it('only the owner can change alert settings, with a valid shape', async () => {
     const settings = (uid: string, extra: Record<string, unknown> = {}) => ({ leadAlertEmails: ['kate@example.com'], updatedAt: serverTimestamp(), updatedBy: uid, ...extra });
     await assertFails(setDoc(doc(staff(), 'settings/notifications'), settings('coach')));
     await assertSucceeds(setDoc(doc(owner(), 'settings/notifications'), settings('kate')));
-    await assertSucceeds(getDoc(doc(staff(), 'settings/notifications')));
+    await assertFails(getDoc(doc(staff(), 'settings/notifications')));
+    await assertSucceeds(getDoc(doc(owner(), 'settings/notifications')));
     await assertFails(setDoc(doc(owner(), 'settings/notifications'), settings('kate', { leadAlertEmails: Array(11).fill('a@b.co') })));
     await assertFails(setDoc(doc(owner(), 'settings/notifications'), settings('kate', { extra: true })));
   });

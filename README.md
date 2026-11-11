@@ -49,16 +49,29 @@ form falls back to opening the visitor's email app.
 https://continuum-performance.web.app/admin is where the team works enquiries. It is not linked
 from the public site and asks search engines not to index it.
 
-- **Leads inbox**: every website enquiry, newest first, updating live. Unread ones are marked (and
-  counted in the tab title). Filter by status or "Assigned to me", and search.
+- **Leads inbox**: website enquiries, newest first, updating live. Unread ones are marked (and
+  counted in the tab title). Filter by status and search.
 - **Lead page**: contact details with one-tap Email/Call, the message, a pipeline status
-  (New → Contacted → Assessment booked → Joined / Not a fit), who it's assigned to, and a notes
-  thread for calls and follow-ups. Opening a lead marks it read.
-- **Settings**: who gets new-lead email alerts (owner only), and the team list.
+  (New → Contacted → Assessment booked → Joined / Not a fit), and a notes thread for calls and
+  follow-ups. Opening a lead marks it read.
+- **Profile menu** (top right): your photo, name and role, *View website* and *Sign out*.
 
-**Roles.** *Owner* (Kate): everything, including deleting leads and changing alert settings.
-*Staff* (coaches): read and work leads, write notes. The Firestore rules enforce this, not just
-the page; `npm test` checks them.
+**Who sees what.**
+
+| | Owner (Kate) | Coach (staff) |
+|---|---|---|
+| Leads | all of them | only those assigned to them |
+| Assign / reassign leads | yes | no |
+| Status, read/unread, notes | yes | on their leads |
+| Delete leads | yes | no |
+| Settings (alert emails, team list) | yes | not shown |
+
+Assigning a lead to a coach marks it unread so it shows up as new for them. The Firestore rules
+enforce all of this, not just the screens; `npm test` checks them.
+
+**On the public site**, the top-right of the menu shows a small person icon that opens the hub.
+On a device where someone has used the hub, it shows their profile photo instead (it remembers
+only their name and photo; access is still checked when the hub opens).
 
 ### One-time setup
 
@@ -67,7 +80,8 @@ the page; `npm test` checks them.
 3. Kate opens `/admin` and signs in with Google once. She'll see "Almost there".
 4. GitHub → **Actions → Team access → Run workflow** with Kate's email and role `owner`.
    She presses "Check again" and she's in. Coaches: same steps with role `staff`.
-   The same workflow changes a role or removes someone (they're signed out).
+   The same workflow changes a role or removes someone (they're signed out). Re-running it for
+   someone also refreshes the profile photo shown for them in the team list.
 
 ### New-lead email alerts
 
