@@ -25,8 +25,8 @@ and testimonials all need replacing with the real thing before launch. Coach pho
 
 ## Contact form
 
-Submissions are saved to the **`leads`** collection in Firestore in the `move-strong` Firebase
-project. View them in the [Firebase console](https://console.firebase.google.com/project/move-strong/firestore)
+Submissions are saved to the **`leads`** collection in Firestore in the Firebase project named move-strong
+(project ID `move-strong-fitness`). View them in the [Firebase console](https://console.firebase.google.com/project/move-strong-fitness/firestore)
 → Firestore → `leads` (newest have `status: "new"`).
 
 `firestore.rules` lets the public site *add* a lead (with checked fields and a server timestamp)
@@ -56,11 +56,13 @@ npm run build     # type-check and build to dist/
 ## Deploying
 
 `.github/workflows/deploy.yml` tests and builds every push and pull request, and deploys `main` to
-**Firebase Hosting** (https://move-strong.web.app) along with the Firestore rules. It signs in with a
+**Firebase Hosting** (https://move-strong-fitness.web.app) along with the Firestore rules. It signs in with a
 service-account key stored as a repository secret:
 
 1. Firebase console → Project settings → **Service accounts** → **Generate new private key**.
-   (The default `firebase-adminsdk` account has the Firebase Admin role, which covers everything here.)
+   If a deploy fails with a permission error, the project's Owner needs to give that service
+   account (its `client_email` in the key file) the **Firebase Admin** and **Service Usage Consumer**
+   roles in Google Cloud → IAM.
 2. GitHub → Settings → Secrets and variables → Actions → **New repository secret**: name
    `FIREBASE_SERVICE_ACCOUNT`, value = the whole contents of the downloaded JSON file. Then delete
    the file from your computer.
@@ -69,8 +71,8 @@ A custom domain is added in the Firebase console → Hosting → **Add custom do
 
 ## Cleaning out old data
 
-The `move-strong` project was used before. **Actions → Firebase inventory & cleanup → Run
+The `move-strong-fitness` project was used before. **Actions → Firebase inventory & cleanup → Run
 workflow** lists what's in it: Firestore collections and document counts, Authentication users,
 Storage files, Cloud Functions and Hosting sites. Run it once with no boxes ticked to see what's
-there, then again with the boxes for what to delete and `move-strong` typed in the confirmation
+there, then again with the boxes for what to delete and `move-strong-fitness` typed in the confirmation
 box. The `leads` collection is never deleted. Deleting is permanent.
