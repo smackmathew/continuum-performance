@@ -1,11 +1,15 @@
 name: Firebase inventory & cleanup
 
-# Run by hand from the Actions tab. With no boxes ticked it only lists what is in
+# Run by hand from the Actions tab. With no delete boxes ticked it only lists what is in
 # the move-strong-fitness project. The "leads" collection (this site's contact-form
 # submissions) is never deleted.
 on:
   workflow_dispatch:
     inputs:
+      function_logs:
+        description: Show recent Cloud Functions logs (e.g. the new-lead email alert)
+        type: boolean
+        default: true
       delete_firestore:
         description: Delete every Firestore collection except "leads"
         type: boolean
@@ -81,3 +85,8 @@ jobs:
           echo
           echo "== Hosting sites"
           npx firebase hosting:sites:list --project move-strong-fitness || true
+      - name: Recent function logs
+        if: inputs.function_logs
+        run: |
+          echo "== Cloud Functions logs (newest last)"
+          npx firebase functions:log --project move-strong-fitness -n 100 || echo "::warning::Couldn't read logs. The service account may need the Logs Viewer role in Google Cloud IAM."

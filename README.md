@@ -136,3 +136,7 @@ workflow** lists what's in it: Firestore collections and document counts, Authen
 Storage files, Cloud Functions and Hosting sites. Run it once with no boxes ticked to see what's
 there, then again with the boxes for what to delete and `move-strong-fitness` typed in the confirmation
 box. The `leads` collection is never deleted. Deleting is permanent.
+
+The same workflow also prints the last 100 Cloud Functions log lines (on by default), which is
+where to look if new-lead alert emails aren't arriving: "Lead alert sent", "Lead alert email
+failed" (with Resend's reply), or "no alert recipients".
