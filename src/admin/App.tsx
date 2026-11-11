@@ -1,16 +1,22 @@
 import { useEffect } from 'react';
-import { signOut, type User } from 'firebase/auth';
-import { auth } from './firebase';
+import type { User } from 'firebase/auth';
 import { useLeads, useRoute, useSession, useTeam } from './data';
 import type { Role } from './types';
-import { Avatar, ResponsiveLogo, Spinner } from './ui';
+import { ResponsiveLogo, Spinner } from './ui';
+import { ProfileMenu } from './ProfileMenu';
 import { NotOnTeam, SignIn } from './pages/SignIn';
 import { Inbox } from './pages/Inbox';
 import { LeadDetail } from './pages/LeadDetail';
 import { Settings } from './pages/Settings';
+import { saveTeamProfile } from '../team-profile';
 
 export default function App() {
   const session = useSession();
+  const notMember = session.state === 'signed-out' || (session.state === 'signed-in' && !session.role);
+  useEffect(() => {
+    if (notMember) saveTeamProfile(null);
+  }, [notMember]);
+
   if (session.state === 'loading') return <Spinner label="Starting…" />;
   if (session.state === 'signed-out') return <SignIn />;
   if (!session.role) return <NotOnTeam email={session.user.email ?? 'this account'} onRetry={session.refresh} />;
@@ -19,19 +25,24 @@ export default function App() {
 
 function Hub({ user, role }: { user: User; role: Role }) {
   const route = useRoute();
-  const leads = useLeads();
-  const team = useTeam();
+  const leads = useLeads(user.uid, role);
+  const team = useTeam(user.uid, role);
+  const owner = role === 'owner';
   const unread = leads.data.filter((l) => !l.readAt).length;
+  const me = team.data.find((m) => m.uid === user.uid)?.name || user.displayName || user.email || 'You';
 
   useEffect(() => {
     document.title = `${unread ? `(${unread}) ` : ''}Team hub · Continuum Performance`;
   }, [unread]);
 
-  const me = team.data.find((m) => m.uid === user.uid)?.name || user.displayName || user.email || 'You';
+  // Lets the public site show this person's photo in its menu.
+  useEffect(() => saveTeamProfile({ name: me, photoURL: user.photoURL }), [me, user.photoURL]);
+
+  const onSettings = owner && route.startsWith('/settings');
   const leadId = route.match(/^\/leads\/([^/]+)$/)?.[1];
   const nav = [
-    { href: '#/', label: 'Leads', active: !route.startsWith('/settings'), badge: unread },
-    { href: '#/settings', label: 'Settings', active: route.startsWith('/settings'), badge: 0 },
+    { href: '#/', label: owner ? 'Leads' : 'My leads', active: !onSettings, badge: unread },
+    ...(owner ? [{ href: '#/settings', label: 'Settings', active: onSettings, badge: 0 }] : []),
   ];
 
   return (
@@ -45,30 +56,25 @@ function Hub({ user, role }: { user: User; role: Role }) {
                 key={n.href}
                 href={n.href}
                 aria-current={n.active ? 'page' : undefined}
-                className={`flex items-center gap-1.5 rounded-md px-2.5 py-2 text-sm font-semibold sm:px-3 ${n.active ? 'bg-navy-50 text-navy-900' : 'text-slate-600 hover:text-navy-900'}`}
+                className={`flex items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 py-2 text-sm font-semibold sm:px-3 ${n.active ? 'bg-navy-50 text-navy-900' : 'text-slate-600 hover:text-navy-900'}`}
               >
                 {n.label}
                 {n.badge > 0 && <span className="rounded-full bg-flame-600 px-1.5 text-xs text-white" aria-label={`${n.badge} unread`}>{n.badge}</span>}
               </a>
             ))}
           </nav>
-          <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
-            <span className="hidden text-right text-sm sm:block">
-              <span className="block font-semibold text-navy-900">{me}</span>
-              <span className="block text-xs capitalize text-slate-500">{role}</span>
-            </span>
-            <Avatar name={me} className="hidden h-9 w-9 text-sm sm:inline-grid" />
-            <button type="button" onClick={() => signOut(auth)} className="whitespace-nowrap text-sm font-semibold text-slate-500 hover:text-navy-900">Sign out</button>
+          <div className="ml-auto shrink-0">
+            <ProfileMenu user={user} name={me} role={role} />
           </div>
         </div>
       </header>
       <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
-        {route.startsWith('/settings') ? (
-          <Settings team={team.data} role={role} />
+        {onSettings ? (
+          <Settings team={team.data} />
         ) : leadId ? (
           <LeadDetail key={leadId} id={leadId} team={team.data} user={user} role={role} />
         ) : (
-          <Inbox leads={leads.data} loading={leads.loading} error={leads.error} team={team.data} user={user} />
+          <Inbox leads={leads.data} loading={leads.loading} error={leads.error} team={team.data} user={user} role={role} />
         )}
       </main>
     </div>

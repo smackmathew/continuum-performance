@@ -2,10 +2,12 @@ rules_version = '2';
 
 // Who can do what:
 // - The public website can only ADD a lead (contact form). Nothing else.
-// - Team members (custom claim role: "owner" or "staff", granted with the
-//   "Team access" GitHub workflow) can read leads, work them (status,
-//   assignee, read/unread) and write notes.
-// - Only the owner can delete leads and change settings.
+// - The owner (custom claim role: "owner", granted with the "Team access"
+//   GitHub workflow) sees and manages everything: all leads, assigning them,
+//   deleting them, the team list and alert settings.
+// - Staff (role: "staff", the coaches) see only leads assigned to them, can
+//   work those (status, read/unread) and write notes on them. They can't
+//   reassign or delete leads, or see the team list or settings.
 // - Team records are written only by the server (the workflow), never by a browser.
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -19,27 +21,36 @@ service cloud.firestore {
     function isOwner() {
       return role() == 'owner';
     }
+    // Staff may only see and work leads assigned to them.
+    function canSee(lead) {
+      return isOwner() || (role() == 'staff' && lead.get('assignedTo', null) == request.auth.uid);
+    }
+    function leadDoc(leadId) {
+      return get(/databases/$(database)/documents/leads/$(leadId)).data;
+    }
 
     match /leads/{leadId} {
       allow create: if isValidLead(request.resource.data);
-      allow read: if isTeam();
-      allow update: if isTeam() && isValidLeadUpdate();
+      allow read: if canSee(resource.data);
+      allow update: if canSee(resource.data) && isValidLeadUpdate()
+        && (isOwner() || request.resource.data.get('assignedTo', null) == resource.data.get('assignedTo', null));
       allow delete: if isOwner();
 
       match /notes/{noteId} {
-        allow read: if isTeam();
-        allow create: if isTeam() && isValidNote(request.resource.data);
-        allow delete: if isTeam() && (resource.data.authorUid == request.auth.uid || isOwner());
+        allow read: if canSee(leadDoc(leadId));
+        allow create: if canSee(leadDoc(leadId)) && isValidNote(request.resource.data);
+        allow delete: if isOwner() || (canSee(leadDoc(leadId)) && resource.data.authorUid == request.auth.uid);
       }
     }
 
+    // The owner sees the whole team; everyone can read their own record.
     match /team/{uid} {
-      allow read: if isTeam();
+      allow read: if isOwner() || (isTeam() && request.auth.uid == uid);
       allow write: if false;
     }
 
     match /settings/notifications {
-      allow read: if isTeam();
+      allow read: if isOwner();
       allow write: if isOwner()
         && request.resource.data.keys().hasOnly(['leadAlertEmails', 'updatedAt', 'updatedBy'])
         && request.resource.data.leadAlertEmails is list

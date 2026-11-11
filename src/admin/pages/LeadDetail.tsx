@@ -7,21 +7,23 @@ import { firstName, fullDate, when } from '../format';
 import { Avatar, Card, ErrorNote, Spinner, StatusPill } from '../ui';
 
 export function LeadDetail({ id, team, user, role }: { id: string; team: TeamMember[]; user: User; role: Role }) {
-  const { data: lead, loading, error } = useLead(id);
+  const { data: lead, loading, error, denied } = useLead(id);
   const notes = useNotes(id);
+  // Notes are only readable once the lead itself is; hide their permission error.
+  const notesError = lead ? notes.error : null;
   const [actionError, setActionError] = useState<string | null>(null);
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
-  const autoRead = useRef(false);
+  const firstLoad = useRef(true);
 
   const run = (p: Promise<unknown>) => p.then(() => setActionError(null)).catch((e: Error) => setActionError(e.message));
 
-  // Opening an unread lead marks it read (once per visit).
+  // Opening an unread lead marks it read. Only on opening: if it becomes unread
+  // while open (e.g. Kate assigns it to a coach), it stays unread for them.
   useEffect(() => {
-    if (lead && !lead.readAt && !autoRead.current) {
-      autoRead.current = true;
-      run(markRead(id));
-    }
+    if (!lead || !firstLoad.current) return;
+    firstLoad.current = false;
+    if (!lead.readAt) run(markRead(id));
   }, [lead, id]);
 
   if (loading) return <Spinner />;
@@ -30,7 +32,13 @@ export function LeadDetail({ id, team, user, role }: { id: string; team: TeamMem
       <div className="space-y-4">
         <a href="#/" className="text-sm font-semibold text-flame-600">← Back to leads</a>
         <ErrorNote error={error} />
-        {!error && <p className="text-slate-600">This lead doesn&apos;t exist any more.</p>}
+        {!error && (
+          <p className="text-slate-600">
+            {denied && role !== 'owner'
+              ? 'This enquiry isn\u2019t assigned to you, or it has been reassigned or deleted.'
+              : 'This lead doesn\u2019t exist any more.'}
+          </p>
+        )}
       </div>
     );
 
@@ -92,14 +100,14 @@ export function LeadDetail({ id, team, user, role }: { id: string; team: TeamMem
           </Card>
 
           <Card title={`Notes (${notes.data.length})`}>
-            <ErrorNote error={notes.error} />
+            <ErrorNote error={notesError} />
             {notes.data.length === 0 ? (
               <p className="text-sm text-slate-500">No notes yet. Log calls, emails and anything the next coach should know.</p>
             ) : (
               <ol className="space-y-4">
                 {notes.data.map((n) => (
                   <li key={n.id} className="flex gap-3">
-                    <Avatar name={n.authorName} />
+                    <Avatar name={n.authorName} photoURL={team.find((m) => m.uid === n.authorUid)?.photoURL ?? (n.authorUid === user.uid ? user.photoURL : null)} />
                     <div className="min-w-0 flex-1">
                       <p className="text-sm">
                         <span className="font-semibold text-navy-900">{n.authorName}</span>{' '}
@@ -138,6 +146,7 @@ export function LeadDetail({ id, team, user, role }: { id: string; team: TeamMem
                   {STATUSES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
                 </select>
               </label>
+              {role === 'owner' ? (
               <label className="block text-sm font-semibold text-navy-800">
                 Assigned to
                 <select className="field" value={lead.assignedTo ?? ''} onChange={(e) => run(assign(id, e.target.value || null))}>
@@ -145,9 +154,15 @@ export function LeadDetail({ id, team, user, role }: { id: string; team: TeamMem
                   {team.map((m) => <option key={m.uid} value={m.uid}>{m.name}{m.uid === user.uid ? ' (me)' : ''}</option>)}
                   {lead.assignedTo && !names.has(lead.assignedTo) && <option value={lead.assignedTo}>Former team member</option>}
                 </select>
+                <span className="mt-1 block text-xs font-normal text-slate-500">Assigning to a coach shows it to them as new.</span>
               </label>
+              ) : (
+                <p className="text-sm text-slate-600">Assigned to <strong className="text-navy-900">you</strong> by Kate.</p>
+              )}
               {lead.updatedBy && (
-                <p className="text-xs text-slate-500">Last updated {when(lead.updatedAt)} by {names.get(lead.updatedBy) ?? 'a team member'}.</p>
+                <p className="text-xs text-slate-500">
+                  Last updated {when(lead.updatedAt)} by {lead.updatedBy === user.uid ? 'you' : (names.get(lead.updatedBy) ?? (role === 'owner' ? 'a team member' : 'Kate'))}.
+                </p>
               )}
             </div>
           </Card>
