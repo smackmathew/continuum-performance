@@ -56,7 +56,8 @@ npm run build     # type-check and build to dist/
 ## Deploying
 
 `.github/workflows/deploy.yml` tests and builds every push and pull request, and deploys `main` to
-**Firebase Hosting** (https://move-strong-fitness.web.app) along with the Firestore rules. It signs in with a
+**Firebase Hosting** at https://continuum-performance.web.app along with the Firestore rules. The
+project's other address, https://move-strong-fitness.web.app, permanently redirects there. It signs in with a
 service-account key stored as a repository secret:
 
 1. Firebase console → Project settings → **Service accounts** → **Generate new private key**.

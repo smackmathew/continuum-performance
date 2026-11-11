@@ -45,7 +45,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: production
-      url: https://move-strong-fitness.web.app
+      url: https://continuum-performance.web.app
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
