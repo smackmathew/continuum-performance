@@ -8,6 +8,13 @@ rules_version = '2';
 // - Staff (role: "staff", the coaches) see only leads assigned to them, can
 //   work those (status, read/unread) and write notes on them. They can't
 //   reassign or delete leads, or see the team list or settings.
+// - Clients follow the same pattern: the owner sees and manages all of them;
+//   a coach sees only clients assigned to them and can tick their onboarding
+//   checklist and send them an onboarding link.
+// - Onboarding links (invites/{token}) are unguessable ids. Anyone holding one
+//   can read its first name and status and submit the forms exactly once.
+//   Nobody outside the team can read the submitted answers (they include
+//   health information); only the owner and the client's coach can.
 // - Team records are written only by the server (the workflow), never by a browser.
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -28,12 +35,25 @@ service cloud.firestore {
     function leadDoc(leadId) {
       return get(/databases/$(database)/documents/leads/$(leadId)).data;
     }
+    function clientDoc(clientId) {
+      return get(/databases/$(database)/documents/clients/$(clientId)).data;
+    }
+    function inviteDoc(token) {
+      return get(/databases/$(database)/documents/invites/$(token)).data;
+    }
+    function stamped(d) {
+      return d.updatedAt == request.time && d.updatedBy == request.auth.uid;
+    }
+    function isOptionalString(v, max) {
+      return v is string && v.size() <= max;
+    }
 
     match /leads/{leadId} {
       allow create: if isValidLead(request.resource.data);
       allow read: if canSee(resource.data);
       allow update: if canSee(resource.data) && isValidLeadUpdate()
-        && (isOwner() || request.resource.data.get('assignedTo', null) == resource.data.get('assignedTo', null));
+        && (isOwner() || (request.resource.data.get('assignedTo', null) == resource.data.get('assignedTo', null)
+                          && request.resource.data.get('clientId', null) == resource.data.get('clientId', null)));
       allow delete: if isOwner();
 
       match /notes/{noteId} {
@@ -59,6 +79,71 @@ service cloud.firestore {
         && request.resource.data.updatedBy == request.auth.uid;
     }
 
+    // ---- Clients -----------------------------------------------------------
+    match /clients/{clientId} {
+      allow read: if canSee(resource.data);
+      allow create: if isOwner() && isValidClient(request.resource.data)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.healthFlag == false;
+      // Owner: anything about how the client is managed (never createdAt/By or leadId).
+      // Coach: only the checklist and the onboarding link, on their own clients.
+      allow update: if canSee(resource.data) && isValidClient(request.resource.data) && stamped(request.resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(
+             isOwner()
+               ? ['name', 'email', 'phone', 'assignedTo', 'membership', 'checklist', 'onboarding', 'healthFlag', 'updatedAt', 'updatedBy']
+               : ['checklist', 'onboarding', 'updatedAt', 'updatedBy']);
+      allow delete: if isOwner();
+
+      match /notes/{noteId} {
+        allow read: if canSee(clientDoc(clientId));
+        allow create: if canSee(clientDoc(clientId)) && isValidNote(request.resource.data);
+        allow delete: if isOwner() || (canSee(clientDoc(clientId)) && resource.data.authorUid == request.auth.uid);
+      }
+    }
+
+    // ---- Onboarding links ----------------------------------------------------
+    match /invites/{token} {
+      // Get by exact token only (never list), so a link can't be discovered.
+      allow get: if true;
+      allow list: if false;
+      // The owner, or the client's coach, creates a link that expires within 31 days.
+      allow create: if isTeam() && canSee(clientDoc(request.resource.data.clientId))
+        && request.resource.data.keys().hasOnly(['clientId', 'firstName', 'status', 'createdAt', 'createdBy', 'expiresAt'])
+        && request.resource.data.keys().hasAll(['clientId', 'firstName', 'status', 'createdAt', 'createdBy', 'expiresAt'])
+        && request.resource.data.firstName is string && request.resource.data.firstName.size() <= 60
+        && request.resource.data.status == 'open'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.expiresAt is timestamp
+        && request.resource.data.expiresAt > request.time
+        && request.resource.data.expiresAt <= request.time + duration.value(31, 'd');
+      allow update: if
+        // The team can revoke an open link.
+        (isTeam() && canSee(clientDoc(resource.data.clientId)) && resource.data.status == 'open'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+          && request.resource.data.status == 'revoked')
+        // The client submits once, in the same batch as their answers.
+        || (resource.data.status == 'open' && resource.data.expiresAt > request.time
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'submittedAt'])
+          && request.resource.data.status == 'submitted'
+          && request.resource.data.submittedAt == request.time
+          && existsAfter(/databases/$(database)/documents/invites/$(token)/submission/form));
+      allow delete: if isOwner();
+
+      // The client's answers. Write-once by the link holder; readable only by the team.
+      match /submission/{docId} {
+        allow create: if docId == 'form'
+          && inviteDoc(token).status == 'open'
+          && inviteDoc(token).expiresAt > request.time
+          && getAfter(/databases/$(database)/documents/invites/$(token)).data.status == 'submitted'
+          && isValidSubmission(request.resource.data);
+        allow read: if isTeam() && canSee(clientDoc(inviteDoc(token).clientId));
+        allow update: if false;
+        allow delete: if isOwner();
+      }
+    }
+
     // Everything else is closed.
     match /{document=**} {
       allow read, write: if false;
@@ -79,10 +164,11 @@ service cloud.firestore {
     // Team members may only change how a lead is being worked, never what the visitor sent.
     function isValidLeadUpdate() {
       let d = request.resource.data;
-      return d.diff(resource.data).affectedKeys().hasOnly(['status', 'assignedTo', 'readAt', 'updatedAt', 'updatedBy'])
+      return d.diff(resource.data).affectedKeys().hasOnly(['status', 'assignedTo', 'readAt', 'clientId', 'updatedAt', 'updatedBy'])
         && d.status in ['new', 'contacted', 'assessment', 'joined', 'not_a_fit']
         && (!('assignedTo' in d) || d.assignedTo == null || (d.assignedTo is string && d.assignedTo.size() <= 128))
         && (!('readAt' in d) || d.readAt == null || d.readAt is timestamp)
+        && (!('clientId' in d) || d.clientId == null || (d.clientId is string && d.clientId.size() <= 128))
         && d.updatedAt == request.time
         && d.updatedBy == request.auth.uid;
     }
@@ -94,6 +180,58 @@ service cloud.firestore {
         && d.authorUid == request.auth.uid
         && d.authorName is string && d.authorName.size() <= 120
         && d.createdAt == request.time;
+    }
+    function isValidClient(d) {
+      return d.keys().hasOnly(['name', 'email', 'phone', 'assignedTo', 'leadId', 'membership', 'checklist', 'onboarding',
+                               'healthFlag', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy'])
+        && d.keys().hasAll(['name', 'email', 'phone', 'assignedTo', 'leadId', 'membership', 'checklist', 'onboarding',
+                            'healthFlag', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy'])
+        && d.name is string && d.name.size() > 0 && d.name.size() <= 120
+        && isOptionalString(d.email, 200) && (d.email == '' || d.email.matches('^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$'))
+        && isOptionalString(d.phone, 40)
+        && (d.assignedTo == null || (d.assignedTo is string && d.assignedTo.size() <= 128))
+        && (d.leadId == null || (d.leadId is string && d.leadId.size() <= 128))
+        && isOptionalString(d.membership, 80)
+        && d.checklist is map
+        && d.checklist.keys().hasOnly(['assessmentBooked', 'assessmentDone', 'intake', 'healthWaiver', 'membership', 'firstSession', 'checkIn30'])
+        && d.onboarding is map
+        && d.onboarding.keys().hasOnly(['inviteId', 'status', 'sentAt', 'submittedAt'])
+        && d.onboarding.get('status', 'none') in ['none', 'sent', 'submitted', 'revoked']
+        && d.healthFlag is bool;
+    }
+
+    function isValidSubmission(d) {
+      return d.keys().hasOnly(['about', 'goals', 'health', 'waiver', 'submittedAt', 'userAgent'])
+        && d.keys().hasAll(['about', 'goals', 'health', 'waiver', 'submittedAt', 'userAgent'])
+        && d.submittedAt == request.time
+        && isOptionalString(d.userAgent, 400)
+        && d.about is map
+        && d.about.keys().hasOnly(['fullName', 'dob', 'email', 'phone', 'emergencyName', 'emergencyPhone'])
+        && d.about.fullName is string && d.about.fullName.size() > 0 && d.about.fullName.size() <= 120
+        && isOptionalString(d.about.get('dob', ''), 10) && isOptionalString(d.about.get('email', ''), 200)
+        && isOptionalString(d.about.get('phone', ''), 40) && isOptionalString(d.about.get('emergencyName', ''), 120)
+        && isOptionalString(d.about.get('emergencyPhone', ''), 40)
+        && d.goals is map
+        && d.goals.keys().hasOnly(['goals', 'experience', 'sport', 'injuries', 'availability', 'heardFrom'])
+        && isOptionalString(d.goals.get('goals', ''), 2000) && isOptionalString(d.goals.get('experience', ''), 40)
+        && isOptionalString(d.goals.get('sport', ''), 120) && isOptionalString(d.goals.get('injuries', ''), 2000)
+        && d.goals.get('availability', []) is list && d.goals.get('availability', []).size() <= 21
+        && isOptionalString(d.goals.get('heardFrom', ''), 120)
+        && d.health is map
+        && d.health.keys().hasOnly(['answers', 'details'])
+        && d.health.answers is map
+        && d.health.answers.keys().hasOnly(['q1', 'q2', 'q3', 'q4', 'q5', 'q6', 'q7'])
+        && d.health.answers.keys().hasAll(['q1', 'q2', 'q3', 'q4', 'q5', 'q6', 'q7'])
+        && d.health.answers.q1 is bool && d.health.answers.q2 is bool && d.health.answers.q3 is bool
+        && d.health.answers.q4 is bool && d.health.answers.q5 is bool && d.health.answers.q6 is bool
+        && d.health.answers.q7 is bool
+        && isOptionalString(d.health.get('details', ''), 2000)
+        && d.waiver is map
+        && d.waiver.keys().hasOnly(['agreed', 'signedName', 'signer', 'version'])
+        && d.waiver.agreed == true
+        && d.waiver.signedName is string && d.waiver.signedName.size() >= 2 && d.waiver.signedName.size() <= 120
+        && d.waiver.signer in ['self', 'guardian']
+        && d.waiver.version is string && d.waiver.version.size() <= 40;
     }
   }
 }

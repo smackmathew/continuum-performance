@@ -13,7 +13,9 @@ export function Settings({ team }: { team: TeamMember[] }) {
   const [draft, setDraft] = useState('');
   const [status, setStatus] = useState<{ kind: 'idle' | 'saved' | 'error'; msg?: string }>({ kind: 'idle' });
 
-  useEffect(() => setEmails(alerts.data), [alerts.data]);
+  useEffect(() => {
+    setEmails(alerts.data);
+  }, [alerts.data]);
   const dirty = emails.join() !== alerts.data.join();
 
   function add(e: FormEvent) {

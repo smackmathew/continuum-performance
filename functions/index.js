@@ -1,9 +1,9 @@
 import { initializeApp } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
+import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { defineSecret, defineString } from 'firebase-functions/params';
 import { logger } from 'firebase-functions';
-import { buildAlert, recipients } from './email.js';
+import { buildAlert, buildOnboardingAlert, recipients, recipientsWithCoach } from './email.js';
 
 initializeApp();
 
@@ -26,16 +26,60 @@ export const leadAlert = onDocumentCreated(
     }
 
     const email = buildAlert(lead, { id: event.params.leadId, hubUrl: HUB_URL.value(), from: ALERT_FROM.value() });
-    // RESEND_API_URL is only set when testing against a local stand-in for Resend.
-    const res = await fetch(process.env.RESEND_API_URL || 'https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${RESEND_API_KEY.value()}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...email, to }),
+    if (await send({ ...email, to }, 'Lead alert', { leadId: event.params.leadId }))
+      logger.info('Lead alert sent', { leadId: event.params.leadId, recipients: to.length });
+  },
+);
+
+/** Sends through Resend; logs and returns false on failure instead of throwing. */
+async function send(email, what, context) {
+  // RESEND_API_URL is only set when testing against a local stand-in for Resend.
+  const res = await fetch(process.env.RESEND_API_URL || 'https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${RESEND_API_KEY.value()}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(email),
+  });
+  if (!res.ok) {
+    logger.error(`${what} email failed`, { status: res.status, body: (await res.text()).slice(0, 500), ...context });
+    return false;
+  }
+  return true;
+}
+
+/**
+ * When a client submits their onboarding forms: tick the intake and
+ * health/waiver steps, flag any "yes" on the health screen, and email the
+ * alert list (or owners) plus the client's coach.
+ */
+export const onboardingSubmitted = onDocumentCreated(
+  { document: 'invites/{token}/submission/{docId}', region: 'us-central1', secrets: [RESEND_API_KEY], retry: false },
+  async (event) => {
+    const form = event.data?.data();
+    if (!form) return;
+    const db = getFirestore();
+    const invite = await db.doc(`invites/${event.params.token}`).get();
+    const clientId = invite.get('clientId');
+    if (!clientId) return logger.warn('Submission for an unknown link', { token: event.params.token.slice(0, 4) });
+    const clientRef = db.doc(`clients/${clientId}`);
+    const client = await clientRef.get();
+    if (!client.exists) return logger.warn('Submission for a deleted client', { clientId });
+
+    const healthYes = Object.values(form.health?.answers ?? {}).filter((v) => v === true).length;
+    const now = FieldValue.serverTimestamp();
+    await clientRef.update({
+      'checklist.intake': now,
+      'checklist.healthWaiver': now,
+      onboarding: { ...(client.get('onboarding') ?? {}), inviteId: event.params.token, status: 'submitted', submittedAt: now },
+      ...(healthYes > 0 ? { healthFlag: true } : {}),
+      updatedAt: now,
+      updatedBy: 'system',
     });
-    if (!res.ok) {
-      logger.error('Lead alert email failed', { status: res.status, body: (await res.text()).slice(0, 500), leadId: event.params.leadId });
-      return;
-    }
-    logger.info('Lead alert sent', { leadId: event.params.leadId, recipients: to.length });
+
+    const [settings, team] = await Promise.all([db.doc('settings/notifications').get(), db.collection('team').get()]);
+    const to = recipientsWithCoach(settings.get('leadAlertEmails'), team.docs.map((d) => ({ uid: d.id, ...d.data() })), client.get('assignedTo'));
+    if (!to.length) return logger.warn('Forms submitted but no one to email', { clientId });
+    const email = buildOnboardingAlert(client.data(), { clientId, hubUrl: HUB_URL.value(), from: ALERT_FROM.value(), healthYes });
+    if (await send({ ...email, to }, 'Onboarding alert', { clientId }))
+      logger.info('Onboarding alert sent', { clientId, recipients: to.length, healthYes });
   },
 );

@@ -14,6 +14,6 @@
     "firebase-functions-test": "^3.5.0"
   },
   "scripts": {
-    "test": "npx --prefix .. firebase emulators:exec --project demo-continuum --only firestore --config ../firebase.json \"node --test test/leadAlert.test.mjs\""
+    "test": "npx --prefix .. firebase emulators:exec --project demo-continuum --only firestore --config ../firebase.json \"node --test --test-concurrency=1 test/leadAlert.test.mjs test/onboarding.test.mjs\""
   }
 }

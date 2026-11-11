@@ -85,7 +85,7 @@ only their name and photo; access is still checked when the hub opens).
 
 ### New-lead email alerts
 
-A Cloud Function (`functions/`) emails everyone listed in hub Settings (or, if the list is
+A Cloud Function (`functions/`, `leadAlert`) emails everyone listed in hub Settings (or, if the list is
 empty, every owner) when an enquiry arrives, with a button to open it in the hub. Replying to
 the email replies to the visitor. It uses [Resend](https://resend.com):
 
@@ -102,13 +102,44 @@ the email replies to the visitor. It uses [Resend](https://resend.com):
    **Cloud Build Editor**, **Artifact Registry Administrator**. Cloud Functions also needs the
    project on the Blaze (pay-as-you-go) plan; at this volume it stays within the free tier.
 
+## Clients & onboarding
+
+**Hub → Clients** holds everyone onboarding or training with you.
+
+- **Make a client** from a lead (lead page → *Convert to client*, which keeps the same coach and
+  marks the lead Joined) or directly (*New client*, owner only).
+- **Onboarding checklist** on each client: assessment booked, assessment done, intake
+  questionnaire, health screen & waiver signed, membership chosen, first session, 30-day check-in.
+- **Onboarding link**: on the client's page, *Create onboarding link*, then *Email link*, *Text
+  link* or *Copy*. The client opens it on their phone (no account) and completes four steps:
+  about them and an emergency contact, goals and training history, a 7-question health screen,
+  and the waiver with a typed signature (or a parent/guardian's, for minors). The link works
+  **once** and expires after 14 days; it can be revoked at any time.
+- **When forms come in**, the answers appear on the client's page (printable), the intake and
+  health/waiver steps are ticked, any "yes" on the health screen is flagged (*Health check* badge,
+  and a banner until the owner marks them cleared), and the alert list (or the owner) plus the
+  client's coach get an email. The email never contains health answers, only a link.
+- **Who sees what**: the owner sees all clients; a coach sees only clients assigned to them and
+  can tick their checklist, send them a link and add notes. Only the owner adds or deletes
+  clients, changes the coach or membership, or clears a health flag.
+
+**Privacy.** Submitted answers include health information. The Firestore rules let the person
+holding the link write the answers once and never read them back; only the owner and that
+client's coach can read them. Links can't be listed or guessed (20-character random tokens), and
+the form page sends no referrer so the token doesn't leak to third parties.
+
+**The waiver is a placeholder.** Edit `src/content/onboarding.ts`: replace `WAIVER_PARAGRAPHS`
+with your own waiver (ideally reviewed by a lawyer), review the health questions, and change
+`WAIVER_VERSION` whenever the text changes. Each signed form records the version it was signed
+against.
+
 ## Developing
 
 ```bash
 npm ci
 npm run dev       # http://localhost:5173
-npm test          # Firestore rules + alert email tests against the emulator
-(cd functions && npm ci && npm test)   # the alert function, against the emulator
+npm test          # Firestore rules (leads, team, clients, onboarding) + email tests, against the emulator
+(cd functions && npm ci && npm test)   # both Cloud Functions, against the emulator
 npm run build     # type-check and build both pages to dist/
 ```
 

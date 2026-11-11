@@ -1,19 +1,16 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { User } from 'firebase/auth';
-import { useLead, useNotes } from '../data';
-import { addNote, assign, deleteLead, deleteNote, markRead, markUnread, setStatus } from '../actions';
+import { useLead } from '../data';
+import { assign, convertLead, deleteLead, markRead, markUnread, setStatus } from '../actions';
 import { STATUSES, type Role, type Status, type TeamMember } from '../types';
 import { firstName, fullDate, when } from '../format';
-import { Avatar, Card, ErrorNote, Spinner, StatusPill } from '../ui';
+import { Card, ErrorNote, Spinner, StatusPill } from '../ui';
+import { NotesCard } from '../NotesCard';
 
 export function LeadDetail({ id, team, user, role }: { id: string; team: TeamMember[]; user: User; role: Role }) {
   const { data: lead, loading, error, denied } = useLead(id);
-  const notes = useNotes(id);
-  // Notes are only readable once the lead itself is; hide their permission error.
-  const notesError = lead ? notes.error : null;
   const [actionError, setActionError] = useState<string | null>(null);
-  const [note, setNote] = useState('');
-  const [saving, setSaving] = useState(false);
+  const [converting, setConverting] = useState(false);
   const firstLoad = useRef(true);
 
   const run = (p: Promise<unknown>) => p.then(() => setActionError(null)).catch((e: Error) => setActionError(e.message));
@@ -46,13 +43,6 @@ export function LeadDetail({ id, team, user, role }: { id: string; team: TeamMem
   const subject = encodeURIComponent('Your free assessment at Continuum Performance');
   const greeting = encodeURIComponent(`Hi ${firstName(lead.name)},\n\nThanks for reaching out to Continuum Performance!\n\n`);
 
-  async function submitNote(e: FormEvent) {
-    e.preventDefault();
-    if (!note.trim()) return;
-    setSaving(true);
-    await run(addNote(id, note).then(() => setNote('')));
-    setSaving(false);
-  }
 
   return (
     <div className="space-y-5">
@@ -99,41 +89,7 @@ export function LeadDetail({ id, team, user, role }: { id: string; team: TeamMem
             </dl>
           </Card>
 
-          <Card title={`Notes (${notes.data.length})`}>
-            <ErrorNote error={notesError} />
-            {notes.data.length === 0 ? (
-              <p className="text-sm text-slate-500">No notes yet. Log calls, emails and anything the next coach should know.</p>
-            ) : (
-              <ol className="space-y-4">
-                {notes.data.map((n) => (
-                  <li key={n.id} className="flex gap-3">
-                    <Avatar name={n.authorName} photoURL={team.find((m) => m.uid === n.authorUid)?.photoURL ?? (n.authorUid === user.uid ? user.photoURL : null)} />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm">
-                        <span className="font-semibold text-navy-900">{n.authorName}</span>{' '}
-                        <span className="text-slate-400">· {when(n.createdAt)}</span>
-                        {(n.authorUid === user.uid || role === 'owner') && (
-                          <button type="button" onClick={() => confirm('Delete this note?') && run(deleteNote(id, n.id))} className="ml-2 text-xs text-slate-400 hover:text-red-700">
-                            Delete
-                          </button>
-                        )}
-                      </p>
-                      <p className="mt-1 whitespace-pre-wrap text-slate-700">{n.text}</p>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            )}
-            <form onSubmit={submitNote} className="mt-5 border-t border-slate-100 pt-5">
-              <label htmlFor="note" className="sr-only">Add a note</label>
-              <textarea id="note" value={note} onChange={(e) => setNote(e.target.value)} rows={3} maxLength={5000} placeholder="Add a note…" className="field !mt-0 resize-y" />
-              <div className="mt-2 flex justify-end">
-                <button type="submit" disabled={saving || !note.trim()} className="btn-primary !py-2 !text-base disabled:opacity-50">
-                  {saving ? 'Saving…' : 'Add note'}
-                </button>
-              </div>
-            </form>
-          </Card>
+          <NotesCard parent="leads" parentId={id} visible={!!lead} team={team} user={user} role={role} emptyText="No notes yet. Log calls, emails and anything the next coach should know." />
         </div>
 
         <aside className="space-y-5">
@@ -168,6 +124,29 @@ export function LeadDetail({ id, team, user, role }: { id: string; team: TeamMem
           </Card>
           <Card>
             <div className="flex flex-col gap-2">
+              {lead.clientId ? (
+                <a href={`#/clients/${lead.clientId}`} className="btn-primary !py-2 !text-base">View client</a>
+              ) : (
+                role === 'owner' && (
+                  <button
+                    type="button"
+                    disabled={converting}
+                    className="btn-primary !py-2 !text-base disabled:opacity-60"
+                    onClick={async () => {
+                      setConverting(true);
+                      try {
+                        const cid = await convertLead(lead);
+                        window.location.hash = `#/clients/${cid}`;
+                      } catch (e) {
+                        setActionError((e as Error).message);
+                        setConverting(false);
+                      }
+                    }}
+                  >
+                    {converting ? 'Creating client…' : 'Convert to client'}
+                  </button>
+                )
+              )}
               <button type="button" className="btn-ghost !py-2 !text-base" onClick={() => run(markUnread(id)).then(() => (window.location.hash = '#/'))}>
                 Mark unread
               </button>
