@@ -30,7 +30,7 @@ jobs:
         run: npm run build
         env:
           VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
-          VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID || 'move-strong' }}
+          VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID || 'move-strong-fitness' }}
           VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
       - uses: actions/upload-artifact@v4
         with:
@@ -39,13 +39,13 @@ jobs:
 
   deploy:
     # Deploys the site to Firebase Hosting and the Firestore security rules to the
-    # move-strong project. Needs the FIREBASE_SERVICE_ACCOUNT repository secret.
+    # move-strong-fitness project. Needs the FIREBASE_SERVICE_ACCOUNT repository secret.
     if: github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     environment:
       name: production
-      url: https://move-strong.web.app
+      url: https://move-strong-fitness.web.app
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -68,4 +68,4 @@ jobs:
           printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/sa.json"
           echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/sa.json" >> "$GITHUB_ENV"
       - name: Deploy hosting and Firestore rules
-        run: npx firebase deploy --only hosting,firestore:rules --project move-strong --non-interactive
+        run: npx firebase deploy --only hosting,firestore:rules --project move-strong-fitness --non-interactive

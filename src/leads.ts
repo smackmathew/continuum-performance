@@ -12,7 +12,7 @@ export type Lead = {
 
 const config = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY as string | undefined,
-  projectId: (import.meta.env.VITE_FIREBASE_PROJECT_ID as string | undefined) || 'move-strong',
+  projectId: (import.meta.env.VITE_FIREBASE_PROJECT_ID as string | undefined) || 'move-strong-fitness',
   appId: import.meta.env.VITE_FIREBASE_APP_ID as string | undefined,
 };
 

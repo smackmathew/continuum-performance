@@ -13,7 +13,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import { getStorage } from 'firebase-admin/storage';
 
-const projectId = process.env.FIREBASE_PROJECT_ID || 'move-strong';
+const projectId = process.env.FIREBASE_PROJECT_ID || 'move-strong-fitness';
 const KEEP = new Set(['leads']);
 const flags = new Set(process.argv.slice(2));
 const del = {

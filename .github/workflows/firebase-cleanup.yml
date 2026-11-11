@@ -1,7 +1,7 @@
 name: Firebase inventory & cleanup
 
 # Run by hand from the Actions tab. With no boxes ticked it only lists what is in
-# the move-strong project. The "leads" collection (this site's contact-form
+# the move-strong-fitness project. The "leads" collection (this site's contact-form
 # submissions) is never deleted.
 on:
   workflow_dispatch:
@@ -23,7 +23,7 @@ on:
         type: boolean
         default: false
       confirm:
-        description: To delete anything, type the project ID (move-strong)
+        description: To delete anything, type the project ID (move-strong-fitness)
         type: string
         default: ''
 
@@ -46,8 +46,8 @@ jobs:
           ANY_DELETE: ${{ inputs.delete_firestore || inputs.delete_auth_users || inputs.delete_storage || inputs.delete_functions }}
           CONFIRM: ${{ inputs.confirm }}
         run: |
-          if [ "$ANY_DELETE" = "true" ] && [ "$CONFIRM" != "move-strong" ]; then
-            echo "::error::A delete option is ticked but the confirmation box doesn't say move-strong. Nothing was deleted."
+          if [ "$ANY_DELETE" = "true" ] && [ "$CONFIRM" != "move-strong-fitness" ]; then
+            echo "::error::A delete option is ticked but the confirmation box doesn't say move-strong-fitness. Nothing was deleted."
             exit 1
           fi
       - name: Sign in to Google Cloud
@@ -72,12 +72,12 @@ jobs:
           DELETE_FUNCTIONS: ${{ inputs.delete_functions }}
         run: |
           echo "== Cloud Functions"
-          npx firebase functions:list --project move-strong --json > "$RUNNER_TEMP/fns.json" || echo '{"result":[]}' > "$RUNNER_TEMP/fns.json"
+          npx firebase functions:list --project move-strong-fitness --json > "$RUNNER_TEMP/fns.json" || echo '{"result":[]}' > "$RUNNER_TEMP/fns.json"
           names=$(jq -r '.result[]? | .id // .name' "$RUNNER_TEMP/fns.json" | sed 's#.*/##' | sort -u)
           if [ -z "$names" ]; then echo "  (none)"; else echo "$names" | sed 's/^/  /'; fi
           if [ "$DELETE_FUNCTIONS" = "true" ] && [ -n "$names" ]; then
-            npx firebase functions:delete $names --project move-strong --force
+            npx firebase functions:delete $names --project move-strong-fitness --force
           fi
           echo
           echo "== Hosting sites"
-          npx firebase hosting:sites:list --project move-strong || true
+          npx firebase hosting:sites:list --project move-strong-fitness || true
