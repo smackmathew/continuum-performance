@@ -1,0 +1,48 @@
+name: Team access
+
+# Run by hand from the Actions tab to give someone access to the team hub
+# (https://continuum-performance.web.app/admin), change their role, or remove them.
+# They must have signed in to the hub once with Google first.
+on:
+  workflow_dispatch:
+    inputs:
+      email:
+        description: Their Google account email
+        type: string
+        required: true
+      role:
+        description: owner = everything incl. settings and deleting; staff = work leads and notes
+        type: choice
+        options: [staff, owner, remove]
+        default: staff
+      name:
+        description: Name shown in the hub (optional; defaults to their Google name)
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Sign in to Google Cloud
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/sa.json" >> "$GITHUB_ENV"
+      - name: Update team access
+        env:
+          EMAIL: ${{ inputs.email }}
+          ROLE: ${{ inputs.role }}
+          NAME: ${{ inputs.name }}
+        run: node scripts/team-access.mjs "$EMAIL" "$ROLE" $NAME

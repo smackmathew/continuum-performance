@@ -2,6 +2,8 @@
 // The Firebase SDK is loaded only when someone submits, so it doesn't slow
 // down the first page load.
 
+import { firebaseConfig as config, useEmulators } from './firebase-config';
+
 export type Lead = {
   name: string;
   email: string;
@@ -10,25 +12,22 @@ export type Lead = {
   message: string;
 };
 
-const config = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY as string | undefined,
-  projectId: (import.meta.env.VITE_FIREBASE_PROJECT_ID as string | undefined) || 'move-strong-fitness',
-  appId: import.meta.env.VITE_FIREBASE_APP_ID as string | undefined,
-};
-
 /** True when the site was built with Firebase settings, so leads can be saved. */
-export const leadsEnabled = Boolean(config.apiKey);
+export const leadsEnabled = Boolean(config.apiKey) || useEmulators;
 
 const limits: Record<keyof Lead, number> = { name: 120, email: 200, phone: 40, interest: 80, message: 4000 };
 
 export async function saveLead(lead: Lead): Promise<void> {
-  const [{ initializeApp, getApps }, { getFirestore, collection, addDoc, serverTimestamp }] = await Promise.all([
+  const [{ initializeApp, getApps }, { getFirestore, connectFirestoreEmulator, collection, addDoc, serverTimestamp }] = await Promise.all([
     import('firebase/app'),
     import('firebase/firestore/lite'),
   ]);
-  const app = getApps()[0] ?? initializeApp(config);
+  const fresh = getApps().length === 0;
+  const app = getApps()[0] ?? initializeApp({ ...config, apiKey: config.apiKey || 'emulator' });
+  const db = getFirestore(app);
+  if (fresh && useEmulators) connectFirestoreEmulator(db, '127.0.0.1', 8080);
   const clean = Object.fromEntries(
     (Object.keys(limits) as (keyof Lead)[]).map((k) => [k, lead[k].trim().slice(0, limits[k])]),
   ) as Lead;
-  await addDoc(collection(getFirestore(app), 'leads'), { ...clean, createdAt: serverTimestamp(), status: 'new' });
+  await addDoc(collection(db, 'leads'), { ...clean, createdAt: serverTimestamp(), status: 'new' });
 }

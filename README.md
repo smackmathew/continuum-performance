@@ -44,13 +44,58 @@ Secrets and variables → Actions → **Variables**):
 For local builds put the same values in `.env.local` (see `.env.example`). Built without them, the
 form falls back to opening the visitor's email app.
 
+## Team hub (`/admin`)
+
+https://continuum-performance.web.app/admin is where the team works enquiries. It is not linked
+from the public site and asks search engines not to index it.
+
+- **Leads inbox**: every website enquiry, newest first, updating live. Unread ones are marked (and
+  counted in the tab title). Filter by status or "Assigned to me", and search.
+- **Lead page**: contact details with one-tap Email/Call, the message, a pipeline status
+  (New → Contacted → Assessment booked → Joined / Not a fit), who it's assigned to, and a notes
+  thread for calls and follow-ups. Opening a lead marks it read.
+- **Settings**: who gets new-lead email alerts (owner only), and the team list.
+
+**Roles.** *Owner* (Kate): everything, including deleting leads and changing alert settings.
+*Staff* (coaches): read and work leads, write notes. The Firestore rules enforce this, not just
+the page; `npm test` checks them.
+
+### One-time setup
+
+1. Firebase console → **Authentication** → Get started → Sign-in method → enable **Google**.
+2. Authentication → **Settings → Authorized domains** → add `continuum-performance.web.app`.
+3. Kate opens `/admin` and signs in with Google once. She'll see "Almost there".
+4. GitHub → **Actions → Team access → Run workflow** with Kate's email and role `owner`.
+   She presses "Check again" and she's in. Coaches: same steps with role `staff`.
+   The same workflow changes a role or removes someone (they're signed out).
+
+### New-lead email alerts
+
+A Cloud Function (`functions/`) emails everyone listed in hub Settings (or, if the list is
+empty, every owner) when an enquiry arrives, with a button to open it in the hub. Replying to
+the email replies to the visitor. It uses [Resend](https://resend.com):
+
+1. In Resend, **add and verify your domain** (DNS records at your domain registrar), then set
+   `ALERT_FROM` in `functions/.env` to an address on it, e.g.
+   `Continuum Performance <alerts@yourdomain.com>`. Until then Resend only delivers to the email
+   on your Resend account.
+2. Create a Resend API key (sending access) and add it as the repository secret
+   **`RESEND_API_KEY`**. The next deploy publishes the function; without the secret it's skipped
+   and the hub works without alerts.
+3. Deploying functions needs more permissions on the service account than hosting does. If the
+   deploy log reports a missing permission, an Owner adds these roles in Google Cloud → IAM:
+   **Cloud Functions Admin**, **Service Account User**, **Secret Manager Admin**,
+   **Cloud Build Editor**, **Artifact Registry Administrator**. Cloud Functions also needs the
+   project on the Blaze (pay-as-you-go) plan; at this volume it stays within the free tier.
+
 ## Developing
 
 ```bash
 npm ci
 npm run dev       # http://localhost:5173
-npm test          # Firestore rules tests against the emulator
-npm run build     # type-check and build to dist/
+npm test          # Firestore rules + alert email tests against the emulator
+(cd functions && npm ci && npm test)   # the alert function, against the emulator
+npm run build     # type-check and build both pages to dist/
 ```
 
 ## Deploying
