@@ -120,3 +120,29 @@ export async function revokeInvite(client: Client) {
 }
 
 export const inviteUrl = (token: string) => `${window.location.origin}/start/?t=${token}`;
+
+// ---- Payments (owner only) ------------------------------------------------------
+
+const PAY_LINK_DAYS = 30;
+
+/** Creates a private payment link for a plan and records it on the client. */
+export async function createPayLink(client: Client, plan: string) {
+  const ref = doc(collection(db, 'payLinks'));
+  const batch = writeBatch(db);
+  batch.set(ref, {
+    clientId: client.id,
+    firstName: client.name.trim().split(/\s+/)[0].slice(0, 60),
+    plan,
+    status: 'open',
+    createdAt: serverTimestamp(),
+    createdBy: auth.currentUser!.uid,
+    expiresAt: Timestamp.fromMillis(Date.now() + PAY_LINK_DAYS * 86400000),
+  });
+  batch.update(doc(db, 'clients', client.id), { payLink: { id: ref.id, plan, sentAt: serverTimestamp() }, ...stamp() });
+  await batch.commit();
+  return ref.id;
+}
+
+export const revokePayLink = (id: string) => updateDoc(doc(db, 'payLinks', id), { status: 'revoked' });
+
+export const payUrl = (token: string) => `${window.location.origin}/pay/?t=${token}`;

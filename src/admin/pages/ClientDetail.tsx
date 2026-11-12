@@ -6,6 +6,7 @@ import { CHECKLIST, type Client, type Role, type SubmissionData, type TeamMember
 import { firstName, fullDate, when } from '../format';
 import { Card, ErrorNote, Spinner } from '../ui';
 import { NotesCard } from '../NotesCard';
+import { BillingBadge, BillingCard } from '../BillingCard';
 import { FormsBadge, HealthFlag, progress } from './Clients';
 import { EXPERIENCE_OPTIONS, HEALTH_QUESTIONS } from '../../content/onboarding';
 import { pricing } from '../../content/site';
@@ -39,6 +40,7 @@ export function ClientDetail({ id, team, user, role }: { id: string; team: TeamM
           <h1 className="break-words font-display text-4xl font-bold uppercase leading-none text-navy-900">{client.name}</h1>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-500">
             <FormsBadge client={client} />
+            <BillingBadge client={client} />
             {client.healthFlag && <HealthFlag />}
             <span>Client since {when(client.createdAt)}</span>
             {client.leadId && owner && <a className="font-semibold text-flame-600" href={`#/leads/${client.leadId}`}>Original enquiry</a>}
@@ -87,6 +89,8 @@ export function ClientDetail({ id, team, user, role }: { id: string; team: TeamM
               })}
             </ul>
           </Card>
+
+          <BillingCard client={client} role={role} run={run} />
 
           <Card title="Details">
             {owner ? <OwnerDetails client={client} team={team} user={user} run={run} /> : (

@@ -1,0 +1,11 @@
+{
+  "_comment": "Membership plans and prices, in cents (USD). The server charges from this file, so a page can't change a price. To change prices, edit here and in the website text (src/content/site.ts), then deploy. Existing subscribers keep their old price until moved in Stripe.",
+  "currency": "usd",
+  "plans": [
+    { "id": "open-gym", "name": "Open Gym", "mode": "subscription", "amount": 8900, "interval": "month", "description": "Unlimited open-gym hours, full equipment access, quarterly assessment." },
+    { "id": "small-group", "name": "Small Group", "mode": "subscription", "amount": 18900, "interval": "month", "description": "Unlimited coached small-group sessions, progressive programming and open-gym access." },
+    { "id": "pt-8", "name": "1:1 Coaching · 8 sessions", "mode": "payment", "amount": 60000, "description": "8 one-to-one coaching sessions with your coach." },
+    { "id": "pt-12", "name": "1:1 Coaching · 12 sessions", "mode": "payment", "amount": 90000, "description": "12 one-to-one coaching sessions with your coach." },
+    { "id": "pt-16", "name": "1:1 Coaching · 16 sessions", "mode": "payment", "amount": 120000, "description": "16 one-to-one coaching sessions with your coach." }
+  ]
+}

@@ -1,5 +1,6 @@
 import { business } from '../content/site';
 import Logo from './Logo';
+import { billingPortalUrl } from '../plans';
 
 export default function Footer() {
   return (
@@ -13,6 +14,7 @@ export default function Footer() {
           <a href={business.social.instagram} target="_blank" rel="noreferrer" className="hover:text-flame-300">Instagram</a>
           <a href={business.social.youtube} target="_blank" rel="noreferrer" className="hover:text-flame-300">YouTube</a>
           <a href={`mailto:${business.email}`} className="hover:text-flame-300">Email</a>
+          {billingPortalUrl && <a href={billingPortalUrl} className="hover:text-flame-300">Manage membership</a>}
         </div>
       </div>
       <p className="container-x mt-10 text-xs text-navy-400">

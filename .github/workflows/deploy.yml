@@ -28,7 +28,7 @@ jobs:
         working-directory: functions
       - name: Test Firestore security rules and the lead alert email
         run: npm test
-      - name: Test the lead alert function
+      - name: Test the Cloud Functions (alerts, onboarding, Stripe)
         run: npm test
         working-directory: functions
       - name: Build
@@ -38,6 +38,8 @@ jobs:
           VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID || 'move-strong-fitness' }}
           VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
           VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_PAYMENTS_ENABLED: ${{ vars.VITE_PAYMENTS_ENABLED }}
+          VITE_BILLING_PORTAL_URL: ${{ vars.VITE_BILLING_PORTAL_URL }}
       - uses: actions/upload-artifact@v4
         with:
           name: site
@@ -77,14 +79,34 @@ jobs:
         run: npx firebase deploy --only hosting,firestore:rules,firestore:indexes --project move-strong-fitness --non-interactive
       # The new-lead email alert needs a Resend API key. Until the RESEND_API_KEY
       # repository secret exists, this is skipped and the hub works without alerts.
-      - name: Deploy the lead alert function
+      # Email alerts need RESEND_API_KEY. Payments additionally need
+      # STRIPE_SECRET_KEY, and STRIPE_WEBHOOK_SECRET once the webhook is set up in
+      # Stripe (until then a placeholder makes the webhook reject every event).
+      # Whatever isn't configured yet is skipped, with a notice.
+      - name: Deploy Cloud Functions
         env:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
         run: |
           if [ -z "$RESEND_API_KEY" ]; then
-            echo "::notice::RESEND_API_KEY secret not set; skipping the lead alert function."
+            echo "::notice::RESEND_API_KEY secret not set; skipping all Cloud Functions."
             exit 0
           fi
+          set_secret() { printf '%s' "$2" | npx firebase functions:secrets:set "$1" --data-file=- --project move-strong-fitness --non-interactive --force; }
           (cd functions && npm ci --omit=dev)
-          printf '%s' "$RESEND_API_KEY" | npx firebase functions:secrets:set RESEND_API_KEY --data-file=- --project move-strong-fitness --non-interactive --force
-          npx firebase deploy --only functions --project move-strong-fitness --non-interactive --force
+          set_secret RESEND_API_KEY "$RESEND_API_KEY"
+          only="functions:leadAlert,functions:onboardingSubmitted"
+          if [ -n "$STRIPE_SECRET_KEY" ]; then
+            set_secret STRIPE_SECRET_KEY "$STRIPE_SECRET_KEY"
+            if [ -n "$STRIPE_WEBHOOK_SECRET" ]; then
+              set_secret STRIPE_WEBHOOK_SECRET "$STRIPE_WEBHOOK_SECRET"
+            else
+              echo "::notice::STRIPE_WEBHOOK_SECRET not set; the Stripe webhook will reject events until it is (see README → Payments)."
+              set_secret STRIPE_WEBHOOK_SECRET "not-configured-yet"
+            fi
+            only="$only,functions:startCheckout,functions:stripeWebhook"
+          else
+            echo "::notice::STRIPE_SECRET_KEY not set; skipping the payment functions."
+          fi
+          npx firebase deploy --only "$only" --project move-strong-fitness --non-interactive --force
