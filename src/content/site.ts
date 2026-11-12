@@ -129,6 +129,7 @@ export const pricing = {
   plans: [
     {
       name: 'Open Gym',
+      planIds: ['open-gym'], // online checkout plans (functions/plans.json)
       price: '$89',
       period: '/month',
       blurb: 'For self-directed lifters who want a serious space.',
@@ -137,6 +138,7 @@ export const pricing = {
     },
     {
       name: 'Small Group',
+      planIds: ['small-group'],
       price: '$189',
       period: '/month',
       blurb: 'Our most popular way to train.',
@@ -150,6 +152,7 @@ export const pricing = {
     },
     {
       name: '1:1 Coaching',
+      planIds: ['pt-8', 'pt-12', 'pt-16'],
       price: '$75',
       period: '/session',
       blurb: 'Packages of 8, 12 or 16 sessions available.',

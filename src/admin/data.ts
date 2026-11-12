@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { collection, doc, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { auth, db } from './firebase';
-import type { Client, Invite, Lead, Note, Role, SubmissionData, TeamMember } from './types';
+import type { Client, Invite, Lead, Note, PayLink, Payment, Role, SubmissionData, TeamMember } from './types';
 
 export type Session =
   | { state: 'loading' }
@@ -156,6 +156,31 @@ export const useAlertEmails = () =>
     (set, fail) => onSnapshot(doc(db, 'settings', 'notifications'), (d) => set((d.data()?.leadAlertEmails as string[]) ?? []), fail),
     [],
     [],
+  );
+
+/** Payment history (owner only; the rules block coaches). */
+export const usePayments = (clientId: string, enabled: boolean) =>
+  useLive<Payment[]>(
+    (set, fail) =>
+      enabled
+        ? onSnapshot(
+            query(collection(db, 'clients', clientId, 'payments'), orderBy('createdAt', 'desc'), limit(24)),
+            (snap) => set(snap.docs.map((d) => ({ id: d.id, ...(d.data({ serverTimestamps: 'estimate' }) as Omit<Payment, 'id'>) }))),
+            fail,
+          )
+        : (set([]), () => {}),
+    [],
+    [clientId, enabled],
+  );
+
+export const usePayLink = (id: string | null | undefined) =>
+  useLive<PayLink | null>(
+    (set, fail) =>
+      id
+        ? onSnapshot(doc(db, 'payLinks', id), (d) => set(d.exists() ? { id: d.id, ...(d.data() as Omit<PayLink, 'id'>) } : null), fail)
+        : (set(null), () => {}),
+    null,
+    [id],
   );
 
 /** Tiny hash router: #/ , #/leads/:id , #/clients , #/clients/:id , #/settings */

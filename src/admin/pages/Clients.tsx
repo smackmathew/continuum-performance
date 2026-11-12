@@ -4,6 +4,7 @@ import { CHECKLIST, type Client, type Role, type TeamMember } from '../types';
 import { createClient } from '../actions';
 import { when } from '../format';
 import { Avatar, ErrorNote, Spinner } from '../ui';
+import { BillingBadge } from '../BillingCard';
 
 export function FormsBadge({ client }: { client: Client }) {
   const s = client.onboarding?.status ?? 'none';
@@ -77,7 +78,11 @@ export function Clients({ clients, loading, error, team, user, role }: {
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                       <span className="truncate font-semibold text-navy-900">{c.name}</span>
                       <FormsBadge client={c} />
+                      <BillingBadge client={c} />
                       {c.healthFlag && <HealthFlag />}
+                      {owner && !c.assignedTo && c.source === 'website' && (
+                        <span className="inline-flex shrink-0 rounded-full bg-navy-100 px-2.5 py-0.5 text-xs font-semibold text-navy-800">Joined online · needs a coach</span>
+                      )}
                     </div>
                     <p className="mt-1 truncate text-sm text-slate-500">
                       {c.membership || 'No membership yet'} · added {when(c.createdAt)}

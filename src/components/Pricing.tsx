@@ -1,4 +1,5 @@
 import { pricing } from '../content/site';
+import { paymentsEnabled, planById } from '../plans';
 
 export default function Pricing() {
   return (
@@ -40,9 +41,30 @@ export default function Pricing() {
                     </li>
                   ))}
                 </ul>
-                <a href="#contact" className={`mt-8 w-full ${f ? 'btn-primary' : 'btn-ghost'}`}>
-                  Get started
-                </a>
+                {paymentsEnabled ? (
+                  <div className="mt-8 space-y-2">
+                    {plan.planIds.length === 1 ? (
+                      <a href={`/pay/?plan=${plan.planIds[0]}`} className={`w-full ${f ? 'btn-primary' : 'btn-ghost'}`}>Join online</a>
+                    ) : (
+                      plan.planIds.map((id) => {
+                        const p = planById(id)!;
+                        const sessions = p.name.match(/(\d+) sessions/)?.[1];
+                        return (
+                          <a key={id} href={`/pay/?plan=${id}`} className={`w-full ${f ? 'btn-primary' : 'btn-ghost'}`}>
+                            {sessions} sessions · ${(p.amount / 100).toLocaleString()}
+                          </a>
+                        );
+                      })
+                    )}
+                    <a href="#contact" className={`block text-center text-sm font-semibold ${f ? 'text-navy-200 hover:text-white' : 'text-slate-500 hover:text-flame-600'}`}>
+                      or book a free assessment first
+                    </a>
+                  </div>
+                ) : (
+                  <a href="#contact" className={`mt-8 w-full ${f ? 'btn-primary' : 'btn-ghost'}`}>
+                    Get started
+                  </a>
+                )}
               </article>
             );
           })}

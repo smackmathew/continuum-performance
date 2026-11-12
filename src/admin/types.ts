@@ -64,7 +64,26 @@ export type Client = {
   createdBy: string;
   updatedAt?: Timestamp;
   updatedBy?: string;
+  /** Written only by the Stripe webhook. */
+  billing?: {
+    status: 'active' | 'trialing' | 'past_due' | 'unpaid' | 'canceled' | 'incomplete' | 'paid' | 'pending';
+    plan: string;
+    planName: string;
+    mode: 'subscription' | 'payment';
+    customerId: string | null;
+    subscriptionId: string | null;
+    currentPeriodEnd: Timestamp | null;
+    cancelAtPeriodEnd: boolean;
+    livemode: boolean;
+    since: Timestamp | null;
+  };
+  source?: 'website';
+  payLink?: { id: string; plan: string; sentAt: Timestamp | null };
 };
+
+export type Payment = { id: string; amount: number; currency: string; description: string; status: string; receiptUrl?: string | null; createdAt: Timestamp | null; livemode: boolean };
+
+export type PayLink = { id: string; clientId: string; plan: string; status: 'open' | 'used' | 'revoked'; expiresAt: Timestamp; firstName: string };
 
 export type Invite = {
   id: string;

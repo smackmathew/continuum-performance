@@ -15,6 +15,10 @@ rules_version = '2';
 //   can read its first name and status and submit the forms exactly once.
 //   Nobody outside the team can read the submitted answers (they include
 //   health information); only the owner and the client's coach can.
+// - Payments: only the owner creates payment links (payLinks/{token}); anyone
+//   holding one can read its plan and first name. Billing status and payment
+//   history on a client are written only by the server (the Stripe webhook);
+//   coaches can see a client's billing status, only the owner sees payments.
 // - Team records are written only by the server (the workflow), never by a browser.
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -83,6 +87,7 @@ service cloud.firestore {
     match /clients/{clientId} {
       allow read: if canSee(resource.data);
       allow create: if isOwner() && isValidClient(request.resource.data)
+        && !('billing' in request.resource.data) && !('source' in request.resource.data)
         && request.resource.data.createdAt == request.time
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.healthFlag == false;
@@ -91,15 +96,43 @@ service cloud.firestore {
       allow update: if canSee(resource.data) && isValidClient(request.resource.data) && stamped(request.resource.data)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(
              isOwner()
-               ? ['name', 'email', 'phone', 'assignedTo', 'membership', 'checklist', 'onboarding', 'healthFlag', 'updatedAt', 'updatedBy']
+               ? ['name', 'email', 'phone', 'assignedTo', 'membership', 'checklist', 'onboarding', 'healthFlag', 'payLink', 'updatedAt', 'updatedBy']
                : ['checklist', 'onboarding', 'updatedAt', 'updatedBy']);
       allow delete: if isOwner();
+
+      // Payment history, written by the Stripe webhook. Owner only.
+      match /payments/{paymentId} {
+        allow read: if isOwner();
+        allow write: if false;
+      }
 
       match /notes/{noteId} {
         allow read: if canSee(clientDoc(clientId));
         allow create: if canSee(clientDoc(clientId)) && isValidNote(request.resource.data);
         allow delete: if isOwner() || (canSee(clientDoc(clientId)) && resource.data.authorUid == request.auth.uid);
       }
+    }
+
+    // ---- Payment links -------------------------------------------------------
+    match /payLinks/{token} {
+      allow get: if true;
+      allow list: if false;
+      allow create: if isOwner() && exists(/databases/$(database)/documents/clients/$(request.resource.data.clientId))
+        && request.resource.data.keys().hasOnly(['clientId', 'firstName', 'plan', 'status', 'createdAt', 'createdBy', 'expiresAt'])
+        && request.resource.data.keys().hasAll(['clientId', 'firstName', 'plan', 'status', 'createdAt', 'createdBy', 'expiresAt'])
+        && request.resource.data.firstName is string && request.resource.data.firstName.size() <= 60
+        && request.resource.data.plan in ['open-gym', 'small-group', 'pt-8', 'pt-12', 'pt-16']
+        && request.resource.data.status == 'open'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.expiresAt is timestamp
+        && request.resource.data.expiresAt > request.time
+        && request.resource.data.expiresAt <= request.time + duration.value(31, 'd');
+      // The owner can revoke an open link; the server marks it used after payment.
+      allow update: if isOwner() && resource.data.status == 'open'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+        && request.resource.data.status == 'revoked';
+      allow delete: if isOwner();
     }
 
     // ---- Onboarding links ----------------------------------------------------
@@ -183,7 +216,7 @@ service cloud.firestore {
     }
     function isValidClient(d) {
       return d.keys().hasOnly(['name', 'email', 'phone', 'assignedTo', 'leadId', 'membership', 'checklist', 'onboarding',
-                               'healthFlag', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy'])
+                               'healthFlag', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'billing', 'source', 'payLink'])
         && d.keys().hasAll(['name', 'email', 'phone', 'assignedTo', 'leadId', 'membership', 'checklist', 'onboarding',
                             'healthFlag', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy'])
         && d.name is string && d.name.size() > 0 && d.name.size() <= 120
@@ -197,7 +230,8 @@ service cloud.firestore {
         && d.onboarding is map
         && d.onboarding.keys().hasOnly(['inviteId', 'status', 'sentAt', 'submittedAt'])
         && d.onboarding.get('status', 'none') in ['none', 'sent', 'submitted', 'revoked']
-        && d.healthFlag is bool;
+        && d.healthFlag is bool
+        && (!('payLink' in d) || (d.payLink is map && d.payLink.keys().hasOnly(['id', 'plan', 'sentAt'])));
     }
 
     function isValidSubmission(d) {

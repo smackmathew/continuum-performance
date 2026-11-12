@@ -98,3 +98,21 @@ export function buildOnboardingAlert(client, { clientId, hubUrl, from, healthYes
 </div></body></html>`;
   return { from, subject: `Forms in: ${name.slice(0, 80)}${healthYes > 0 ? ' (health check needed)' : ''}`, text, html };
 }
+
+/** Billing emails (new membership, cancellation, failed payment). No card details, just facts and a link. */
+export function buildBillingAlert({ subject, lines, clientId, hubUrl, from }) {
+  const link = clientId ? `${hubUrl.replace(/\/?$/, '/')}#/clients/${encodeURIComponent(clientId)}` : null;
+  const text = [...lines, ...(link ? ['', `Open their client page: ${link}`] : [])].join('\n');
+  const html = `<!doctype html><html><body style="margin:0;background:#f5f7fb;font-family:Inter,Arial,sans-serif;color:#0b1730">
+<div style="max-width:560px;margin:0 auto;padding:24px">
+  <div style="background:#0b1730;color:#fff;border-radius:12px 12px 0 0;padding:18px 24px;border-bottom:4px solid #d63a0f">
+    <div style="font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#ff9e75">Billing</div>
+    <div style="font-size:20px;font-weight:700;margin-top:4px">${escape(oneLine(subject))}</div>
+  </div>
+  <div style="background:#fff;border:1px solid #e2e8f0;border-top:0;border-radius:0 0 12px 12px;padding:24px;font-size:15px;line-height:1.5">
+    ${lines.map((l) => `<p style="margin:0 0 12px">${escape(l)}</p>`).join('')}
+    ${link ? `<a href="${escape(link)}" style="display:inline-block;margin-top:8px;background:#d63a0f;color:#fff;text-decoration:none;font-weight:700;padding:12px 20px;border-radius:6px">Open client page</a>` : ''}
+  </div>
+</div></body></html>`;
+  return { from, subject: oneLine(subject).slice(0, 150), text, html };
+}

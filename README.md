@@ -133,13 +133,69 @@ with your own waiver (ideally reviewed by a lawyer), review the health questions
 `WAIVER_VERSION` whenever the text changes. Each signed form records the version it was signed
 against.
 
+## Payments (Stripe)
+
+Two ways to pay, both through Stripe Checkout (card details never touch this site):
+
+- **Payment links from the hub** (owner): on a client's page → *Membership & billing* → pick a
+  plan → *Create payment link* → *Email link* / *Text link* / *Copy*. The link (`/pay/?t=…`) works
+  once and expires after 30 days; it can be cancelled.
+- **Join buttons on the website**: the pricing section's *Join online* and 1:1 pack buttons
+  (`/pay/?plan=…`). Hidden until payments are switched on (step 5 below).
+
+Plans and prices live in **`functions/plans.json`** (the server always charges from this file).
+Open Gym and Small Group are monthly subscriptions; 1:1 Coaching is sold as 8/12/16-session packs.
+No products need to be created in Stripe. To change a price, edit that file and the matching text
+in `src/content/site.ts`, then deploy (existing subscribers keep their old price unless changed in
+Stripe).
+
+**After a payment**, Stripe tells the `stripeWebhook` function, which sets the client's billing
+status and membership, ticks *Membership chosen*, records the payment and emails the alert list.
+Someone who joins on the website without being a client yet becomes a new client marked
+*Joined online · needs a coach*. Renewals add to the payment history; a failed card marks the
+client *Payment failed* and emails you (Stripe retries and emails the client); cancellations mark
+them *Cancelled*. Coaches see a client's billing status; only the owner sees amounts, sends links
+or opens Stripe.
+
+**Clients manage their own membership** (update card, receipts, cancel) on Stripe's hosted
+portal, linked from the website footer and the payment confirmation page.
+
+### Setting up Stripe
+
+Start in **test mode** (Stripe's sandbox: fake cards, no real money), then repeat for live.
+
+1. Create a Stripe account at stripe.com (business details and bank account are needed only to go
+   live). Make sure the dashboard toggle says **Test mode**.
+2. Developers → API keys → copy the **Secret key** (`sk_test_…`) into the GitHub repository
+   secret **`STRIPE_SECRET_KEY`**. Re-run the latest *Build and deploy* (or push anything); it
+   deploys `startCheckout` and `stripeWebhook`.
+3. Developers → Webhooks → **Add endpoint**:
+   - URL: `https://us-central1-move-strong-fitness.cloudfunctions.net/stripeWebhook`
+   - Events: `checkout.session.completed`, `customer.subscription.updated`,
+     `customer.subscription.deleted`, `invoice.paid`, `invoice.payment_failed`.
+   Copy its **Signing secret** (`whsec_…`) into the repository secret **`STRIPE_WEBHOOK_SECRET`**
+   and re-run the deploy.
+4. Settings → Billing → **Customer portal**: turn on the login link, allow updating payment
+   methods, viewing invoices and cancelling. Copy the link (`https://billing.stripe.com/p/login/…`)
+   into the repository **variable** `VITE_BILLING_PORTAL_URL`.
+5. To show the website's Join buttons, set the repository **variable** `VITE_PAYMENTS_ENABLED` to
+   `1` and re-run the deploy. (Hub payment links work without this.)
+6. Test with card `4242 4242 4242 4242`, any future date and any CVC. The hub shows a **TEST**
+   badge on test-mode billing.
+7. **Going live**: activate the account, switch the dashboard to live mode, and repeat steps 2–4
+   with the live keys (`sk_live_…`, a live webhook endpoint and its secret, the live portal link).
+
+If the payment functions fail to deploy on permissions, the deploy log names the missing role;
+an Owner adds it to the service account in Google Cloud → IAM (likely **Cloud Run Admin**, which
+lets the deploy make the two payment endpoints publicly reachable, as Stripe and browsers need).
+
 ## Developing
 
 ```bash
 npm ci
 npm run dev       # http://localhost:5173
-npm test          # Firestore rules (leads, team, clients, onboarding) + email tests, against the emulator
-(cd functions && npm ci && npm test)   # both Cloud Functions, against the emulator
+npm test          # Firestore rules (leads, team, clients, onboarding, payments) + email tests, against the emulator
+(cd functions && npm ci && npm test)   # all Cloud Functions (alerts, onboarding, Stripe), against the emulator and fake Stripe
 npm run build     # type-check and build both pages to dist/
 ```
 
