@@ -120,6 +120,24 @@
               "value": "no-referrer"
             }
           ]
+        },
+        {
+          "source": "/api/**",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-store"
+            }
+          ]
+        }
+      ],
+      "rewrites": [
+        {
+          "source": "/api/checkout",
+          "function": {
+            "functionId": "startCheckout",
+            "region": "us-central1"
+          }
         }
       ]
     },

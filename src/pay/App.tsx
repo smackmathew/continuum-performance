@@ -96,7 +96,12 @@ export default function App() {
       if (!res.ok || !out.url) throw new Error(out.error || 'We couldn’t start checkout.');
       window.location.assign(out.url);
     } catch (e) {
-      setError((e as Error).message);
+      // A TypeError here means the request never got an answer (offline, or blocked by an extension).
+      setError(
+        e instanceof TypeError
+          ? 'We couldn\u2019t reach the payment service. Check your connection (and any ad or tracker blocker), then try again.'
+          : (e as Error).message,
+      );
       setStarting(false);
     }
   }
