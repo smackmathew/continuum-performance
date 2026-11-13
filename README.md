@@ -145,7 +145,9 @@ Two ways to pay, both through Stripe Checkout (card details never touch this sit
 
 The pay page calls checkout at `/api/checkout` on the site's own address; Firebase Hosting forwards
 it to the `startCheckout` function (`firebase.json` → `rewrites`). Being same-origin, it works on
-every address the site is served from (`.web.app`, `.firebaseapp.com`, a custom domain).
+every address the site is served from (`continuumperformance.net`, `.web.app`, `.firebaseapp.com`).
+`SITE_URL` and `HUB_URL` in `functions/.env` set where Stripe returns customers and where alert
+emails link to; both use `https://continuumperformance.net`.
 
 Plans and prices live in **`functions/plans.json`** (the server always charges from this file).
 Open Gym and Small Group are monthly subscriptions; 1:1 Coaching is sold as 8/12/16-session packs.
